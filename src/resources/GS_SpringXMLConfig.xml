@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+           http://www.springframework.org/schema/beans/spring-beans-3.0.xsd">
+
+    <bean id="greetingService" class="core.app.classes.GreetingServiceImpl">
+        <constructor-arg type="String" value="Hello World!"/>
+        <constructor-arg ref="bus"/>
+    </bean>
+
+    <bean id="bus" class="core.app.classes.Bus">
+        <property name="message" value="Transport type is Bus"/>
+    </bean>
+
+    <bean id="bus2" class="core.app.classes.Bus"></bean>
+
+    <bean id="car" class="core.app.classes.Car">
+        <constructor-arg type="String" value="Ferrari"/>
+        <constructor-arg type="int" value="4"/>
+    </bean>
+
+    <interceptor id="interceptor1" class="application.classes.CapitalizingInterceptor"/>
+
+    <interceptor id="interceptor2" class="application.classes.LowerCasingInterceptor"/>
+
+
+    <!--
+    <bean id="..." class="...">
+      <constructor-arg ref="..." />
+      <property name="..." value="..." />
+      <property name="..." ref="..." />
+    </bean>
+    -->
+
+    <!-- more bean definitions go here -->
+
+</beans>
