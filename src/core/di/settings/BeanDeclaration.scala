@@ -17,6 +17,8 @@ sealed trait InjectScope
 
 case object CONSTRUCTOR extends InjectScope
 
-case object SETTER extends InjectScope
+object SETTER
 
-case object FIELD extends InjectScope
+case class SETTER(field: String) extends InjectScope
+
+case object INTERFACE extends InjectScope

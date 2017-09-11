@@ -10,7 +10,7 @@
     </bean>
 
     <bean id="bus" class="core.app.classes.Bus">
-        <property name="message" value="Transport type is Bus"/>
+        <property name="message" type="String" value="Transport type is Bus"/>
     </bean>
 
     <bean id="bus2" class="core.app.classes.Bus"></bean>
