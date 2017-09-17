@@ -7,10 +7,11 @@
     <bean id="greetingService" class="core.app.classes.GreetingServiceImpl">
         <constructor-arg type="String" value="Hello World!"/>
         <constructor-arg ref="bus"/>
+        <property name="injectAllah" type="String" value="Azazazaz" />
     </bean>
 
     <bean id="bus" class="core.app.classes.Bus">
-        <property name="message" type="String" value="Transport type is Bus"/>
+        <property name="message" type="String" value="Transport type is Allah"/>
     </bean>
 
     <bean id="bus2" class="core.app.classes.Bus"></bean>

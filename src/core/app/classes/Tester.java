@@ -5,7 +5,6 @@ import core.di.BeanFactory;
 import core.di.imp.XmlBeanContext;
 
 import java.io.File;
-import java.util.Arrays;
 import java.util.RandomAccess;
 
 /**
@@ -26,11 +25,12 @@ public class Tester {
         GreetingService greetingService = factory.instantiate(GreetingServiceImpl.class);
 
         System.out.println(greetingService.getMessage());
+        ((GreetingServiceImpl)greetingService).transportMessage();
 
-        System.out.println(B.class.getMethod("f").getDeclaringClass());
+        /*System.out.println(B.class.getMethod("f").getDeclaringClass());
         System.out.println(B.class.getMethod("z").getDeclaringClass());
         System.out.println(B.class.getMethod("l").getDeclaringClass());
-        System.out.println(Arrays.asList(B.class.getAnnotatedInterfaces()));
+        System.out.println(Arrays.asList(B.class.getAnnotatedInterfaces()));*/
     }
 
 }

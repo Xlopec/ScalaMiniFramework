@@ -7,8 +7,8 @@ package core.di
   */
 trait BeanFactory {
 
-  def instantiate[T](c: Class[T]): T
+  def instantiate[T <: AnyRef](c: Class[T]): T
 
-  def instantiate[T](id: String): T
+  def instantiate[T <: AnyRef](id: String): T
 
 }

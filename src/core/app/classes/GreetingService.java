@@ -4,4 +4,7 @@ public interface GreetingService {
     public String getMessage();
     
     public void setMessage(String message);
+
+    void injectAllah(String allah);
+
 }

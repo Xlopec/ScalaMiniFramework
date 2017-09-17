@@ -1,6 +1,7 @@
 package core.di.imp
 
 import java.io.File
+import java.lang.reflect.{Method, Modifier}
 import java.util
 
 import core.di.settings._
@@ -36,14 +37,14 @@ final class XmlBeanContext(file: File) extends BeanContext {
 
   private def parseNode(node: Node) = {
     val id = node \ "@id" text
-    val classOf = node \ "@class" text
-
-    BeanDeclaration(id, findClass(classOf), parseDependencies(node))
+    val classOf = findClass(node \ "@class" text).asInstanceOf[Class[AnyRef]]
+    BeanDeclaration(id, classOf, parseDependencies(node, classOf))
   }
 
-  private def parseDependencies(node: Node): List[Dependency] = {
+  private def parseDependencies(node: Node, classOf: Class[_]): List[Dependency] = {
     val constructorArgs = node \ "constructor-arg" map (node => parseConstructorDeps(node.asInstanceOf[Elem])) toList
-    val setterArgs = node \ "property" map (node => parseSetterDeps(node.asInstanceOf[Elem])) toList;
+    val methods = classOf.getMethods.filter(m => isInjectable(m))
+    val setterArgs = node \ "property" map (node => parseSetterDeps(node.asInstanceOf[Elem], methods)) toList;
     constructorArgs ++ setterArgs
   }
 
@@ -62,86 +63,41 @@ final class XmlBeanContext(file: File) extends BeanContext {
     }
   }
 
-  private def parseSetterDeps(node: Elem) = {
-    val attributes = node.attributes
-    val nameOpt = attributes.get("name")
-    require(nameOpt.isDefined, "Undefined 'name' property!")
+  private def isInjectable(method: Method) =
+    method.getParameterCount == 1 && (method.getModifiers & Modifier.PUBLIC) != 0 && method.getReturnType.getName.equals("void")
 
-    val scope = SETTER(nameOpt.get.text)
-    val refOpt = attributes.get("ref")
-
-    if (refOpt.nonEmpty) {
-      require(attributes.length == 2,
-        s"""Invalid attributes length, should be 2 but were ${attributes.length}
-            |in node $node""".stripMargin)
-
-      Dependency(Right(BeanRef(refOpt.get.text)), scope)
-    } else {
-      parsePrimitive(node, scope)
-    }
-  }
-
-  private def parseInterfaceDeps(node: Elem, classOf: Class[_]) = {
+  private def parseSetterDeps(node: Elem, methods: Array[Method]): Dependency = {
     val attributes = node.attributes
     val nameOpt = attributes.get("name")
     require(nameOpt.isDefined, "Undefined 'name' property!")
 
     val name = nameOpt.get.text
-    val interfaces = classOf.getAnnotatedInterfaces.map(t => t.getClass)
+    var dependency: Dependency = null
 
-    for (method <- classOf.getMethods) {
+    for (method <- methods) {
+      val isEq = name.equals(method.getName)
+      val capitalized = s"set${name.capitalize}"
 
-      if (s"set$name.capitalize".equals(method.getName)) {
-        // this is a plain setter
+      if (isEq || capitalized.equals(method.getName)) {
+        require(dependency == null, s"ambiguous mapping for node $node, already bound dependency $dependency")
+        // this is a plain setter, maybe even inherited
+        // from the interface, doesn't matter
+        val field = if (isEq) name else capitalized
 
+        if (isReferenceType(attributes)) {
+          dependency = Dependency(Right(BeanRef(attributes.get("ref").get.text)), SETTER(field))
+        } else {
+          dependency = parsePrimitive(node, SETTER(field))
+        }
       }
     }
-
-    val scope = SETTER(nameOpt.get.text)
-    val refOpt = attributes.get("ref")
-
-    if (refOpt.nonEmpty) {
-      require(attributes.length == 2,
-        s"""Invalid attributes length, should be 2 but were ${attributes.length}
-            |in node $node""".stripMargin)
-
-      Dependency(Right(BeanRef(refOpt.get.text)), scope)
-    } else {
-      parsePrimitive(node, scope)
-    }
+    require(dependency != null,
+      s"""Not found suitable setter/interface
+          |inject method for node $node""".stripMargin)
+    dependency
   }
 
   private def isReferenceType(attributes: MetaData) = attributes.get("ref").isDefined
-
-  private def checkValidAttrs(node: Elem, scope: InjectScope) = {
-    val attributes = node.attributes
-
-    def error = {
-      if (isReferenceType(attributes)) {
-        scope match {
-          // only ref required
-          case CONSTRUCTOR if attributes.length != 1 => Some(1)
-          // ref and name required
-          case SETTER(_) | INTERFACE if attributes.length != 2 => Some(2)
-          case _ => None
-        }
-      } else {
-        scope match {
-          // type and value required
-          case CONSTRUCTOR if attributes.length != 2 => Some(2)
-          // type, value and name are required
-          case SETTER(_) | INTERFACE if attributes.length != 3 => Some(3)
-          case _ => None
-        }
-      }
-    }
-
-    if (error.isDefined) {
-      throw new IllegalStateException(
-        s"""Invalid attributes length, should be ${error.get} but were ${attributes.length}
-            |in node $node""".stripMargin)
-    }
-  }
 
   private def parsePrimitive(node: Elem, scope: InjectScope) = {
     val attributes = node.attributes

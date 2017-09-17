@@ -16,4 +16,14 @@ public class GreetingServiceImpl implements GreetingService {
     public void setMessage(String message) {
         this.message = message;
     }
+
+    @Override
+    public void injectAllah(String allah) {
+        System.out.println("Allah!!! " + allah);
+    }
+
+    public void transportMessage() {
+        transport.getTransport();
+    }
+
 }
