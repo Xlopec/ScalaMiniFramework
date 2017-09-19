@@ -1,7 +1,8 @@
 package core.app.classes;
 
-public class GreetingServiceImpl implements GreetingService {
+public class GreetingServiceImpl implements GreetingService, InterfaceInjectable {
     private String message;
+    private String something;
     private Transport transport;
     
     public GreetingServiceImpl(String message, Transport transport) {
@@ -17,13 +18,17 @@ public class GreetingServiceImpl implements GreetingService {
         this.message = message;
     }
 
-    @Override
-    public void injectAllah(String allah) {
-        System.out.println("Allah!!! " + allah);
-    }
-
     public void transportMessage() {
         transport.getTransport();
     }
 
+    @Override
+    public String getSomething() {
+        return something;
+    }
+
+    @Override
+    public void injectSomething(String s) {
+        this.something = s;
+    }
 }

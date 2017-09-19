@@ -2,9 +2,16 @@ package core.app.classes;
 
 public class Bus implements Transport {
     private String message;
-    
+    private final GreetingService greetingService;
+
     public Bus() {
         message = "I am the Bus!";
+        greetingService = null;
+    }
+
+    public Bus(GreetingService greetingService) {
+        message = "I am the Bus!";
+        this.greetingService = greetingService;
     }
 
     public String getMessage() {

@@ -7,11 +7,22 @@
     <bean id="greetingService" class="core.app.classes.GreetingServiceImpl">
         <constructor-arg type="String" value="Hello World!"/>
         <constructor-arg ref="bus"/>
-        <property name="injectAllah" type="String" value="Azazazaz" />
+        <property name="injectSomething" type="String" value="Whatever" />
     </bean>
 
     <bean id="bus" class="core.app.classes.Bus">
-        <property name="message" type="String" value="Transport type is Allah"/>
+        <property name="message" type="String" value="Transport type is Bus"/>
+    </bean>
+
+    <bean id="cyclicBus" class="core.app.classes.Bus">
+        <constructor-arg ref="cyclicGreetingService" />
+        <property name="message" type="String" value="Transport type is Bus"/>
+    </bean>
+
+    <bean id="cyclicGreetingService" class="core.app.classes.GreetingServiceImpl">
+        <constructor-arg type="String" value="Hello World!"/>
+        <constructor-arg ref="cyclicBus"/>
+        <property name="injectSomething" type="String" value="Something" />
     </bean>
 
     <bean id="bus2" class="core.app.classes.Bus"></bean>
