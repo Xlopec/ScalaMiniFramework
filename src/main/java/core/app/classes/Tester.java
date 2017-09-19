@@ -21,7 +21,7 @@ public class Tester {
 
         //System.out.println(b.getMessage());
 
-        GreetingService greetingService = factory.instantiate(GreetingServiceImpl.class);
+        GreetingService greetingService = factory.instantiate("greetingService");
 
         System.out.println(greetingService.getMessage());
         ((GreetingServiceImpl)greetingService).transportMessage();

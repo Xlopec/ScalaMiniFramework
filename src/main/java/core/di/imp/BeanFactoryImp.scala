@@ -1,7 +1,7 @@
 package core.di.imp
 
 import java.lang.reflect
-import java.lang.reflect.Constructor
+import java.lang.reflect.{Constructor, Modifier}
 
 import core.di.{BeanFactory, settings}
 import core.di.settings._
@@ -64,6 +64,7 @@ final class BeanFactoryImp(declarations: Iterable[BeanDeclaration]) extends Bean
   }
 
   private def instantiateForConstructor[T <: AnyRef](c: Class[T], declaration: BeanDeclaration, beanChain: mutable.Set[String]): T = {
+    require(!Modifier.isAbstract(c.getModifiers), s"Cannot instantiate abstract class $c, bean ${declaration.id}")
     require(!hasCyclicDependency(declaration, beanChain),
       s"""Cyclic dependency was found for constructor of bean: ${declaration.id},
           |the dependency path was: ${beanChain.mkString("->")}
@@ -72,7 +73,8 @@ final class BeanFactoryImp(declarations: Iterable[BeanDeclaration]) extends Bean
     beanChain += declaration.id
 
     val declared = declaration.dependencies.filter(dep => dep.scope == settings.Constructor)
-    val matchingConstructors = declaration.classOf.getConstructors.filter(constructor => constructor.getParameterCount == declared.length)
+    val matchingConstructors = declaration.classOf.getConstructors
+      .filter(constructor => constructor.getParameterCount == declared.length && Modifier.isPublic(constructor.getModifiers))
 
     require((declared.nonEmpty && matchingConstructors.length >= 1)
       // generated or default constructor case
