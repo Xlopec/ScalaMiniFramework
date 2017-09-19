@@ -3,7 +3,7 @@ package core.di.imp
 import java.lang.reflect
 import java.lang.reflect.Constructor
 
-import core.di.BeanFactory
+import core.di.{BeanFactory, settings}
 import core.di.settings._
 
 import scala.collection.mutable
@@ -41,7 +41,7 @@ final class BeanFactoryImp(declarations: Iterable[BeanDeclaration]) extends Bean
   }
 
   private def instantiateForConstructor[T <: AnyRef](c: Class[T], declaration: BeanDeclaration): T = {
-    val declared = declaration.dependencies.filter(dep => dep.scope == CONSTRUCTOR)
+    val declared = declaration.dependencies.filter(dep => dep.scope == settings.Constructor)
     val matchingConstructors = declaration.classOf.getConstructors.filter(constructor => constructor.getParameterCount == declared.length)
 
     require((declared.nonEmpty && matchingConstructors.length >= 1)
@@ -79,7 +79,7 @@ final class BeanFactoryImp(declarations: Iterable[BeanDeclaration]) extends Bean
   }
 
   private def inject[T](bean: T, declaration: BeanDeclaration): Unit = {
-    val declared = declaration.dependencies.filter(dep => dep.scope != CONSTRUCTOR)
+    val declared = declaration.dependencies.filter(dep => dep.scope != settings.Constructor)
 
     for (dependency <- declared) {
       val args = dependency.either match {
@@ -87,7 +87,7 @@ final class BeanFactoryImp(declarations: Iterable[BeanDeclaration]) extends Bean
         case Right(BeanRef(id)) => val instance = instantiate(id); (instance.getClass, instance)
       }
 
-      bean.getClass.getMethod(dependency.scope.asInstanceOf[SETTER].field, args._1).invoke(bean, args._2)
+      bean.getClass.getMethod(dependency.scope.asInstanceOf[Setter].field, args._1).invoke(bean, args._2)
     }
   }
 

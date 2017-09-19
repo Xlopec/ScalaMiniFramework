@@ -5,7 +5,7 @@ package core.di.settings
   */
 object BeanDeclaration
 
-final case class BeanDeclaration(id: String, classOf: Class[_ <: AnyRef], dependencies: List[Dependency])
+final case class BeanDeclaration(id: String, classOf: Class[_ <: AnyRef], scope: BeanScope, dependencies: List[Dependency])
 
 final case class PrimitiveType(classOf: Class[_], value: AnyRef)
 
@@ -15,8 +15,14 @@ final case class BeanRef(id: String)
 
 sealed trait InjectScope
 
-case object CONSTRUCTOR extends InjectScope
+case object Constructor extends InjectScope
 
-object SETTER
+object Setter
 
-final case class SETTER(field: String) extends InjectScope
+final case class Setter(field: String) extends InjectScope
+
+sealed trait BeanScope
+
+object Singleton extends BeanScope
+
+object PerInject extends BeanScope

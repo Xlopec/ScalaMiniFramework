@@ -17,19 +17,19 @@ package object imp {
   private[imp] trait ValueTransformer {
     def transform(strVal: String): AnyRef
 
-    def getWrappedClass: Class[_]
+    def getWrappedClass: Class[_ <: AnyRef]
   }
 
   private[imp] final case class StringPair() extends ValueTransformer {
     override def transform(strVal: String) = strVal
 
-    override def getWrappedClass: Class[_] = classOf[lang.String]
+    override def getWrappedClass: Class[_ <: AnyRef] = classOf[lang.String]
   }
 
-  private[imp] final case class WrapperPair(primitive: Class[_], wrapper: Class[_]) extends ValueTransformer {
+  private[imp] final case class WrapperPair(primitive: Class[_], wrapper: Class[_ <: AnyRef]) extends ValueTransformer {
     override def transform(strVal: String) = wrapper.getMethod("valueOf", classOf[lang.String]).invoke(null, strVal)
 
-    override def getWrappedClass: Class[_] = wrapper
+    override def getWrappedClass: Class[_ <: AnyRef] = wrapper
   }
 
 }
