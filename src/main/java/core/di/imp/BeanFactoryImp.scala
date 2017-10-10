@@ -36,7 +36,9 @@ final class BeanFactoryImp(declarations: Iterable[BeanDeclaration]) extends Bean
     if (declaration.scope == Singleton) {
       val classOf = declaration.classOf
 
-      singletones.getOrElseUpdate(classOf, instantiate(c, classToDeclaration(c), beanChain)).asInstanceOf[T]
+      singletones.synchronized {
+        singletones.getOrElseUpdate(classOf, instantiate(c, classToDeclaration(c), beanChain)).asInstanceOf[T]
+      }
     } else {
       instantiate(c, classToDeclaration(c), beanChain)
     }
@@ -49,7 +51,9 @@ final class BeanFactoryImp(declarations: Iterable[BeanDeclaration]) extends Bean
     if (declaration.scope == Singleton) {
       val classOf = declaration.classOf
 
-      singletones.getOrElseUpdate(classOf, instantiate(classOf.asInstanceOf[Class[T]], declaration, beanChain)).asInstanceOf[T]
+      singletones.synchronized {
+        singletones.getOrElseUpdate(classOf, instantiate(classOf.asInstanceOf[Class[T]], declaration, beanChain)).asInstanceOf[T]
+      }
     } else {
       instantiate(classOf.asInstanceOf[Class[T]], declaration, beanChain)
     }

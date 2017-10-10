@@ -1,5 +1,8 @@
 package core.app.classes;
 
+import core.di.annotation.Component;
+
+@Component
 public class Bus implements Transport {
     private String message;
     private final GreetingService greetingService;

@@ -15,18 +15,22 @@ final class XmlParser(file: File) extends ConfigParser {
   require(file != null, "file == null")
   require(file.exists() && file.isFile && file.canRead,
     s"""Couldn't read xml config file ${file.getAbsolutePath}:
-        |exists -${file.exists()},
-        |is file -${file.isFile},
-        |readable -${file.canRead}
+       |exists -${file.exists()},
+       |is file -${file.isFile},
+       |readable -${file.canRead}
    """.stripMargin)
 
-  override def parse(): Iterable[BeanDeclaration] = {
-    val beans = XML.loadFile(file) \ "bean"
+  override def parse(): ContextSettings = {
+    val xml = XML.loadFile(file)
+    val beanDeclarations = xml \ "bean" map (node => parseBeanDeclarations(node)) toList
+    val scanSettings = xml \ "component-scan" map (node => parseScanSettings(node)) toList
 
-    beans map (node => parseNode(node)) toList
+    ContextSettings(beanDeclarations, scanSettings)
   }
 
-  private def parseNode(node: Node) = {
+  private def parseScanSettings(node: Node) = ScanSettings(node \ "@base-package" text)
+
+  private def parseBeanDeclarations(node: Node) = {
     val id = node \ "@id" text
     val classOf = Class.forName(node \ "@class" text).asInstanceOf[Class[AnyRef]]
 
@@ -47,7 +51,7 @@ final class XmlParser(file: File) extends ConfigParser {
     if (refOpt.nonEmpty) {
       require(attributes.length == 1,
         s"""Invalid attributes length, should be 1 but were ${attributes.length}
-            |in node $node""".stripMargin)
+           |in node $node""".stripMargin)
 
       Dependency(Right(BeanRef(refOpt.get.text)), Constructor)
     } else {
@@ -85,7 +89,7 @@ final class XmlParser(file: File) extends ConfigParser {
     }
     require(dependency != null,
       s"""Not found suitable setter/interface
-          |inject method for node $node""".stripMargin)
+         |inject method for node $node""".stripMargin)
     dependency
   }
 
@@ -96,12 +100,12 @@ final class XmlParser(file: File) extends ConfigParser {
     val valueOpt = attributes.get("value")
     require(valueOpt.nonEmpty,
       s"""Not found attribute, named 'value'
-          |in node $node""".stripMargin)
+         |in node $node""".stripMargin)
 
     val typeOpt = attributes.get("type")
     require(typeOpt.nonEmpty,
       s"""Not found attribute, named 'type'
-          |in node $node""".stripMargin)
+         |in node $node""".stripMargin)
 
     val pair = typeMapping.getOrElse(typeOpt.get.text, throw new RuntimeException(s"Not found type for ${typeOpt.get.text}"))
     Dependency(Left(PrimitiveType(pair.getWrappedClass, pair.transform(valueOpt.get.text))), scope)

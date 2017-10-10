@@ -2,10 +2,14 @@ package core.di
 
 import java.lang
 
+import core.di.annotation.{Component, Controller, Repository, Service}
+
 /**
   * Created by Максим on 9/11/2017.
   */
 package object imp {
+
+  private[imp] val scanAnnotation = Array(classOf[Repository], classOf[Component], classOf[Service], classOf[Controller])
 
   private[imp] val typeMapping: Map[String, ValueTransformer] = Map("int" -> WrapperPair(classOf[Int], classOf[Integer]),
     "boolean" -> WrapperPair(classOf[Boolean], classOf[lang.Boolean]),

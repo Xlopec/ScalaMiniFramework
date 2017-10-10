@@ -13,7 +13,7 @@ public class Tester {
 
     public static void main(String...args) throws NoSuchMethodException {
 
-        BeanContext context = new XmlBeanContext(new File("D:\\Workspace Intellij Idea\\ScalaFramework\\src\\main\\resources\\GS_SpringXMLConfig.xml"));
+        BeanContext context = new XmlBeanContext(new File("/Users/max/IdeaProjects/ScalaMiniFramework/src/main/resources/GS_SpringXMLConfig.xml"));
 
         BeanFactory factory = context.getBeanFactory();
 
@@ -25,11 +25,6 @@ public class Tester {
 
         System.out.println(greetingService.getMessage());
         ((GreetingServiceImpl)greetingService).transportMessage();
-
-        /*System.out.println(B.class.getMethod("f").getDeclaringClass());
-        System.out.println(B.class.getMethod("z").getDeclaringClass());
-        System.out.println(B.class.getMethod("l").getDeclaringClass());
-        System.out.println(Arrays.asList(B.class.getAnnotatedInterfaces()));*/
     }
 
 }

@@ -10,8 +10,8 @@ import org.junit.rules.ExpectedException;
 
 import java.io.File;
 
+import static junit.framework.Assert.assertNotNull;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
 
 
 public class XmlAppContextTest {

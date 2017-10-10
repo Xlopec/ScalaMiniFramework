@@ -27,6 +27,8 @@
 
     <bean id="bus2" class="core.app.classes.Bus"></bean>
 
+    <component-scan base-package="core.app.classes" />
+
     <bean id="car" class="core.app.classes.Car">
         <constructor-arg type="String" value="Ferrari"/>
         <constructor-arg type="int" value="4"/>
