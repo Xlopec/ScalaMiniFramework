@@ -16,12 +16,16 @@ final case class BeanDeclaration(id: String, classOf: Class[_ <: AnyRef], scope:
   require(dependencies != null, "undefined bean dependencies list")
 }
 
-final case class PrimitiveType(classOf: Class[_], value: AnyRef) {
+/*final case class SharedProperty(id: String, override val classOf: Class[_ <: AnyRef], override val value: AnyRef) extends Property(classOf, value) {
+  require(id != null && !id.isEmpty, "undefined bean id")
+}*/
+
+case class Property(classOf: Class[_], value: AnyRef) {
   require(classOf != null, "undefined value target class")
   require(value != null, "undefined value")
 }
 
-final case class Dependency(either: Either[PrimitiveType, BeanRef], scope: InjectScope) {
+final case class Dependency(either: Either[Property, BeanRef], scope: InjectScope) {
   require(either != null, "undefined dependency type")
   require(scope != null, "undefined dependency scope")
 }

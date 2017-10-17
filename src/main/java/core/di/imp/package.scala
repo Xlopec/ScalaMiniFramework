@@ -25,7 +25,7 @@ package object imp {
   }
 
   private[imp] final case class StringPair() extends ValueTransformer {
-    override def transform(strVal: String) = strVal
+    override def transform(strVal: String): String = strVal
 
     override def getWrappedClass: Class[_ <: AnyRef] = classOf[lang.String]
   }

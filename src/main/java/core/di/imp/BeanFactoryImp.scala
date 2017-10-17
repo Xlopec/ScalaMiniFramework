@@ -91,7 +91,7 @@ final class BeanFactoryImp(declarations: Iterable[BeanDeclaration]) extends Bean
     } else {
       // bean has declared dependencies, go to a long path
       val args = declared.map(dep => dep.either match {
-        case Left(PrimitiveType(_, value)) => value
+        case Left(Property(_, value)) => value
         case Right(BeanRef(id)) => instantiate(id, beanChain)
       })
 
@@ -119,7 +119,7 @@ final class BeanFactoryImp(declarations: Iterable[BeanDeclaration]) extends Bean
 
     for (dependency <- declared) {
       val args = dependency.either match {
-        case Left(PrimitiveType(classOf, value)) => (classOf, value)
+        case Left(Property(classOf, value)) => (classOf, value)
         case Right(BeanRef(id)) => val instance = instantiate(id); (instance.getClass, instance)
       }
 

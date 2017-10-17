@@ -1,11 +1,20 @@
 package core.di.imp
 
 import java.io.File
-import java.lang.reflect.{Method, Modifier}
+import java.lang.reflect.{Constructor, Method, Modifier}
+import java.net.URL
+import java.util
 
-import core.di.ConfigParser
+import core.di.{ConfigParser, settings}
+import core.di.annotation.{Autowiring, Component, Singleton}
 import core.di.settings._
+import org.reflections.Reflections
+import org.reflections.scanners.{SubTypesScanner, TypeAnnotationsScanner}
+import org.reflections.util.{ClasspathHelper, ConfigurationBuilder, FilterBuilder}
+import scala.collection.JavaConversions._
 
+import scala.collection.mutable
+import scala.language.postfixOps
 import scala.xml.{Elem, MetaData, Node, XML}
 
 /**
@@ -22,29 +31,54 @@ final class XmlParser(file: File) extends ConfigParser {
 
   override def parse(): ContextSettings = {
     val xml = XML.loadFile(file)
-    val beanDeclarations = xml \ "bean" map (node => parseBeanDeclarations(node)) toList
-    val scanSettings = xml \ "component-scan" map (node => parseScanSettings(node)) toList
+    val context = new Context(xml \ "property" map parseProperties toMap)
+    val declaredBeans = xml \ "bean" map (node => parseBeanDeclaration(node, context)) toList
+    val scanSettings = xml \ "component-scan" map parseScanSetting toList
 
-    ContextSettings(beanDeclarations, scanSettings)
+    ContextSettings(declaredBeans ++ resolveScannedBeans(scanSettings, context))
   }
 
-  private def parseScanSettings(node: Node) = ScanSettings(node \ "@base-package" text)
+  private def parseProperties(node: Node) = {
+    val id = node \ "@id" text
+    val attributes = node.attributes
+    val valueOpt = attributes.get("value")
 
-  private def parseBeanDeclarations(node: Node) = {
+    require(valueOpt.nonEmpty,
+      s"""Not found attribute, named 'value'
+         |in node $node""".stripMargin)
+
+    val typeOpt = attributes.get("type")
+
+    require(typeOpt.nonEmpty,
+      s"""Not found attribute, named 'type'
+         |in node $node""".stripMargin)
+
+    val pair = typeMapping.getOrElse(typeOpt.get.text, throw new RuntimeException(s"Not found type for ${typeOpt.get.text}"))
+
+    (id, Property(pair.getWrappedClass, pair.transform(valueOpt.get.text)))
+  }
+
+  private def parseBeanDeclaration(node: Node, context: Context) = {
     val id = node \ "@id" text
     val classOf = Class.forName(node \ "@class" text).asInstanceOf[Class[AnyRef]]
 
-    BeanDeclaration(id, classOf, parseScope(node), parseDependencies(node, classOf))
+    BeanDeclaration(id, classOf, parseScope(node), parseDependencies(node, classOf, context))
   }
 
-  private def parseDependencies(node: Node, classOf: Class[_]): List[Dependency] = {
-    val constructorArgs = node \ "constructor-arg" map (node => parseConstructorDeps(node.asInstanceOf[Elem])) toList
+  private def parseScanSetting(node: Node) = ScanSettings(node \ "@base-package" text)
+
+  private def parseDependencies(node: Node, classOf: Class[_], context: Context): List[Dependency] = {
+    val constructorDeps = node \ "constructor-arg" map (node => parseConstructorDeps(node.asInstanceOf[Elem], context)) toList
     val methods = classOf.getMethods.filter(m => isInjectable(m))
-    val setterArgs = node \ "property" map (node => parseSetterDeps(node.asInstanceOf[Elem], methods)) toList;
-    constructorArgs ++ setterArgs
+    val setterDeps = node \ "property" map (node => parseSetterDeps(node.asInstanceOf[Elem], methods, context)) toList
+
+    constructorDeps ++ setterDeps
   }
 
-  private def parseConstructorDeps(node: Elem) = {
+  private def parseDependencies(classOf: Class[_ <: AnyRef], context: Context): List[Dependency] =
+    parseConstructorDeps(classOf, context) ++ parseSetterDeps(classOf, context)
+
+  private def parseConstructorDeps(node: Elem, context: Context) = {
     val attributes = node.attributes
     val refOpt = attributes.get("ref")
 
@@ -53,16 +87,38 @@ final class XmlParser(file: File) extends ConfigParser {
         s"""Invalid attributes length, should be 1 but were ${attributes.length}
            |in node $node""".stripMargin)
 
-      Dependency(Right(BeanRef(refOpt.get.text)), Constructor)
+      Dependency(Right(BeanRef(refOpt.get.text)), settings.Constructor)
     } else {
-      parsePrimitive(node, Constructor)
+      parsePrimitive(node, context, settings.Constructor)
     }
   }
 
   private def isInjectable(method: Method) =
     method.getParameterCount == 1 && (method.getModifiers & Modifier.PUBLIC) != 0 && method.getReturnType.getName.equals("void")
 
-  private def parseSetterDeps(node: Elem, methods: Array[Method]): Dependency = {
+  private def parseSetterDeps(cl: Class[_ <: AnyRef], context: Context) = {
+    val dependencies = for (method <- cl.getMethods if method.isAnnotationPresent(classOf[Autowiring])) yield {
+      require(isInjectable(method), s"Method $method isn't injectable")
+
+      val cl = method.getParameterTypes()(0)
+      val autowiring = method.getAnnotation[Autowiring](classOf[Autowiring ])
+      val id = extractId(cl, autowiring)
+      val depType = typeMapping.get(cl.getSimpleName)
+
+      if (depType.isEmpty) {
+        Dependency(Right(BeanRef(id)), Setter(method.getName))
+      } else {
+        // primitive type,
+        // should be annotated
+        require(autowiring != null, s"Primitive argument should be annotated with ${classOf[Autowiring]}")
+        Dependency(Left(context.properties(id)), Setter(method.getName))
+      }
+    }
+
+    dependencies toList
+  }
+
+  private def parseSetterDeps(node: Elem, methods: Array[Method], context: Context): Dependency = {
     val attributes = node.attributes
     val nameOpt = attributes.get("name")
     require(nameOpt.isDefined, "Undefined 'name' property!")
@@ -83,7 +139,7 @@ final class XmlParser(file: File) extends ConfigParser {
         if (isReferenceType(attributes)) {
           dependency = Dependency(Right(BeanRef(attributes.get("ref").get.text)), Setter(field))
         } else {
-          dependency = parsePrimitive(node, Setter(field))
+          dependency = parsePrimitive(node, context, Setter(field))
         }
       }
     }
@@ -93,28 +149,109 @@ final class XmlParser(file: File) extends ConfigParser {
     dependency
   }
 
+  private def parseConstructorDeps(cl: Class[_ <: AnyRef], context: Context) = {
+    val constructors = cl.getConstructors
+
+    require(constructors.nonEmpty, s"No public constructors found for bean $cl")
+
+    var matches = 0
+    var foundConstructor: Constructor[_] = null
+
+    for (constructor <- constructors) {
+      if (matches == 0 || constructor.isAnnotationPresent(classOf[Autowiring])) {
+        foundConstructor = constructor
+        matches += 1
+      }
+    }
+
+    require(matches == 1,
+      s"""Found $matches constructors, annotated with ${classOf[Autowiring].getClass.getName}
+         |annotation while only one is required""".stripMargin)
+
+    val dependencies = for (param <- foundConstructor.getParameters) yield {
+      val autowiring = param.getAnnotation[Autowiring](classOf[Autowiring])
+      val id = extractId(param.getClass, autowiring)
+      val depType = typeMapping.get(param.getType.getSimpleName)
+
+      if (depType.isDefined) {
+        // primitive type,
+        // should be annotated
+        require(autowiring != null, s"Primitive argument should be annotated with ${classOf[Autowiring]}")
+        Dependency(Left(context.properties(id)), settings.Constructor)
+      } else {
+        Dependency(Right(BeanRef(id)), settings.Constructor)
+      }
+    }
+    dependencies toList
+  }
+
+  private def resolveScannedBeans(scanSettings: Iterable[ScanSettings], context: Context) = {
+    val packages = new mutable.MutableList[String]
+    val urls = new util.ArrayList[URL]
+
+    for (setting <- scanSettings) {
+      packages += setting.pack
+      urls.addAll(ClasspathHelper.forPackage(setting.pack))
+    }
+
+    val reflections = new Reflections(new ConfigurationBuilder()
+      .setUrls(urls)
+      .setScanners(new SubTypesScanner(false), new TypeAnnotationsScanner())
+      .filterInputsBy(new FilterBuilder().includePackage(packages: _*)))
+
+    val beanDeclarations = new mutable.MutableList[BeanDeclaration]
+
+    for (t <- reflections.getTypesAnnotatedWith(classOf[Component], true)) {
+      beanDeclarations += createBeanDeclaration(t.asInstanceOf[Class[_ <: AnyRef]], context)
+    }
+
+    beanDeclarations
+  }
+
+  private def createBeanDeclaration(cl: Class[_ <: AnyRef], context: Context) = {
+    val a = cl.getAnnotation(classOf[Component])
+    val id = if (a.id() == null || a.id().isEmpty) cl.getName else cl.getName
+    val scope = if (cl.isAnnotationPresent(classOf[Singleton])) settings.Singleton else PerInject
+
+    BeanDeclaration(id, cl, scope, parseDependencies(cl, context))
+  }
+
   private def isReferenceType(attributes: MetaData) = attributes.get("ref").isDefined
 
-  private def parsePrimitive(node: Elem, scope: InjectScope) = {
+  private def parsePrimitive(node: Elem, context: Context, scope: InjectScope) = {
     val attributes = node.attributes
-    val valueOpt = attributes.get("value")
-    require(valueOpt.nonEmpty,
-      s"""Not found attribute, named 'value'
-         |in node $node""".stripMargin)
+    val variable = attributes.get("var")
 
-    val typeOpt = attributes.get("type")
-    require(typeOpt.nonEmpty,
-      s"""Not found attribute, named 'type'
-         |in node $node""".stripMargin)
+    if (variable.isDefined) {
+      require(attributes.length == 1,
+        s"""Only one attribute is allowed but were ${attributes.length},
+           |$attributes""".stripMargin)
+      Dependency(Left(context.properties(variable.get.text)), scope)
 
-    val pair = typeMapping.getOrElse(typeOpt.get.text, throw new RuntimeException(s"Not found type for ${typeOpt.get.text}"))
-    Dependency(Left(PrimitiveType(pair.getWrappedClass, pair.transform(valueOpt.get.text))), scope)
+    } else {
+      val valueOpt = attributes.get("value")
+
+      require(valueOpt.nonEmpty,
+        s"""Not found attribute, named 'value'
+           |in node $node""".stripMargin)
+
+      val typeOpt = attributes.get("type")
+      require(typeOpt.nonEmpty,
+        s"""Not found attribute, named 'type'
+           |in node $node""".stripMargin)
+
+      val pair = typeMapping.getOrElse(typeOpt.get.text, throw new RuntimeException(s"Not found type for ${typeOpt.get.text}"))
+
+      Dependency(Left(Property(pair.getWrappedClass, pair.transform(valueOpt.get.text))), scope)
+    }
   }
 
   private def parseScope(node: Node) =
     node.attribute("scope") match {
       case Some(x) if x.text.equals("instance") => PerInject
-      case None => Singleton
+      case None => settings.Singleton
     }
+
+  private def extractId(argument: Class[_], annotation: Autowiring) = if (annotation == null || annotation.named.isEmpty) BeanUtil.createBeanId(argument) else annotation.named
 
 }
