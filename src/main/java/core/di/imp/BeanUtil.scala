@@ -7,6 +7,6 @@ object BeanUtil {
     * @param classOf bean class
     * @return string identifier for a given bean type
     */
-  def createBeanId(classOf: Class[_]): String = classOf.getClass.getName
+  def createBeanId(classOf: Class[_]): String = classOf.getName
 
 }

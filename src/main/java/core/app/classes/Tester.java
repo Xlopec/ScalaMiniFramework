@@ -25,6 +25,10 @@ public class Tester {
 
         System.out.println(greetingService.getMessage());
         ((GreetingServiceImpl)greetingService).transportMessage();
+
+        ScannedClass scannedClass = factory.instantiate("MyScannedClass");
+
+        System.out.println(String.format("Greeter says: %s", scannedClass.greet()));
     }
 
 }

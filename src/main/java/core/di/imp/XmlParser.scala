@@ -1,18 +1,19 @@
 package core.di.imp
 
 import java.io.File
+import java.lang.annotation.Annotation
 import java.lang.reflect.{Constructor, Method, Modifier}
 import java.net.URL
 import java.util
 
-import core.di.{ConfigParser, settings}
-import core.di.annotation.{Autowiring, Component, Singleton}
+import core.di.annotation.{Singleton => _, _}
 import core.di.settings._
+import core.di.{ConfigParser, settings}
 import org.reflections.Reflections
 import org.reflections.scanners.{SubTypesScanner, TypeAnnotationsScanner}
 import org.reflections.util.{ClasspathHelper, ConfigurationBuilder, FilterBuilder}
-import scala.collection.JavaConversions._
 
+import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.language.postfixOps
 import scala.xml.{Elem, MetaData, Node, XML}
@@ -170,7 +171,7 @@ final class XmlParser(file: File) extends ConfigParser {
 
     val dependencies = for (param <- foundConstructor.getParameters) yield {
       val autowiring = param.getAnnotation[Autowiring](classOf[Autowiring])
-      val id = extractId(param.getClass, autowiring)
+      val id = extractId(param.getType, autowiring)
       val depType = typeMapping.get(param.getType.getSimpleName)
 
       if (depType.isDefined) {
@@ -200,8 +201,10 @@ final class XmlParser(file: File) extends ConfigParser {
       .filterInputsBy(new FilterBuilder().includePackage(packages: _*)))
 
     val beanDeclarations = new mutable.MutableList[BeanDeclaration]
+    val scannableTypes = reflections.getTypesAnnotatedWith(classOf[Component], true) ++ reflections.getTypesAnnotatedWith(classOf[Service], true) ++
+      reflections.getTypesAnnotatedWith(classOf[Controller], true) ++ reflections.getTypesAnnotatedWith(classOf[Repository], true)
 
-    for (t <- reflections.getTypesAnnotatedWith(classOf[Component], true)) {
+    for (t <- scannableTypes) {
       beanDeclarations += createBeanDeclaration(t.asInstanceOf[Class[_ <: AnyRef]], context)
     }
 
@@ -210,8 +213,8 @@ final class XmlParser(file: File) extends ConfigParser {
 
   private def createBeanDeclaration(cl: Class[_ <: AnyRef], context: Context) = {
     val a = cl.getAnnotation(classOf[Component])
-    val id = if (a.id() == null || a.id().isEmpty) cl.getName else cl.getName
-    val scope = if (cl.isAnnotationPresent(classOf[Singleton])) settings.Singleton else PerInject
+    val id = extractId(cl, a)
+    val scope = if (cl.isAnnotationPresent(classOf[core.di.annotation.Singleton])) settings.Singleton else PerInject
 
     BeanDeclaration(id, cl, scope, parseDependencies(cl, context))
   }
@@ -252,6 +255,21 @@ final class XmlParser(file: File) extends ConfigParser {
       case None => settings.Singleton
     }
 
-  private def extractId(argument: Class[_], annotation: Autowiring) = if (annotation == null || annotation.named.isEmpty) BeanUtil.createBeanId(argument) else annotation.named
+  private def extractId(argument: Class[_], annotation: Annotation) = {
+    if (annotation == null) {
+      BeanUtil.createBeanId(argument)
+
+    } else {
+      val rawId = annotation match {
+        case a: Autowiring => a.named
+        case c: Component => c.id
+        case s: Service => s.id
+        case c: Controller => c.id
+        case r: Repository => r.id
+      }
+
+      if (rawId.isEmpty) BeanUtil.createBeanId(argument) else rawId
+    }
+  }
 
 }

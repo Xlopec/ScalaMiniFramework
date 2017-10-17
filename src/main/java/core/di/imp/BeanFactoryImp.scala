@@ -34,10 +34,10 @@ final class BeanFactoryImp(declarations: Iterable[BeanDeclaration]) extends Bean
     val declaration = classToDeclaration(c)
 
     if (declaration.scope == Singleton) {
-      val classOf = declaration.classOf
+      val cl = declaration.classOf
 
       singletones.synchronized {
-        singletones.getOrElseUpdate(classOf, instantiate(c, classToDeclaration(c), beanChain)).asInstanceOf[T]
+        singletones.getOrElseUpdate(cl, instantiate(c, classToDeclaration(c), beanChain)).asInstanceOf[T]
       }
     } else {
       instantiate(c, classToDeclaration(c), beanChain)
@@ -47,15 +47,15 @@ final class BeanFactoryImp(declarations: Iterable[BeanDeclaration]) extends Bean
   private def instantiate[T <: AnyRef](id: String, beanChain: mutable.Set[String]): T = {
     require(idToDeclaration.contains(id), s"Bean with id $id wasn't found, probably, you're missing bean declaration?")
     val declaration = idToDeclaration(id)
+    val cl = declaration.classOf
 
     if (declaration.scope == Singleton) {
-      val classOf = declaration.classOf
 
       singletones.synchronized {
-        singletones.getOrElseUpdate(classOf, instantiate(classOf.asInstanceOf[Class[T]], declaration, beanChain)).asInstanceOf[T]
+        singletones.getOrElseUpdate(cl, instantiate(cl.asInstanceOf[Class[T]], declaration, beanChain)).asInstanceOf[T]
       }
     } else {
-      instantiate(classOf.asInstanceOf[Class[T]], declaration, beanChain)
+      instantiate(cl.asInstanceOf[Class[T]], declaration, beanChain)
     }
   }
 
