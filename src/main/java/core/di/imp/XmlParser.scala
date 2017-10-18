@@ -252,7 +252,7 @@ final class XmlParser(file: File) extends ConfigParser {
   private def parseScope(node: Node) =
     node.attribute("scope") match {
       case Some(x) if x.text.equals("instance") => PerInject
-      case None => settings.Singleton
+      case _ => settings.Singleton
     }
 
   private def extractId(argument: Class[_], annotation: Annotation) = {

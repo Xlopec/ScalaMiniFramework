@@ -6,7 +6,7 @@
 
     <property id="someProp" type="String" value="Some property value" />
 
-    <bean id="greetingService" class="core.app.classes.GreetingServiceImpl">
+    <bean id="greetingService" scope="singleton" class="core.app.classes.GreetingServiceImpl">
         <constructor-arg type="String" value="Hello World!"/>
         <constructor-arg ref="bus"/>
         <property name="injectSomething" type="String" value="Whatever" />
