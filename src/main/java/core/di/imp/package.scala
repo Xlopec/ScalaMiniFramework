@@ -1,8 +1,13 @@
 package core.di
 
+import java.io.File
 import java.lang
+import java.lang.annotation.Annotation
+import java.lang.reflect.{Method, Modifier}
 
-import core.di.annotation.{Component, Controller, Repository, Service}
+import core.di.annotation._
+
+import scala.xml.{Elem, XML}
 
 /**
   * Created by Максим on 9/11/2017.
@@ -31,9 +36,42 @@ package object imp {
   }
 
   private[imp] final case class WrapperPair(primitive: Class[_], wrapper: Class[_ <: AnyRef]) extends ValueTransformer {
-    override def transform(strVal: String) = wrapper.getMethod("valueOf", classOf[lang.String]).invoke(null, strVal)
+    override def transform(strVal: String): AnyRef = wrapper.getMethod("valueOf", classOf[lang.String]).invoke(null, strVal)
 
     override def getWrappedClass: Class[_ <: AnyRef] = wrapper
+  }
+
+  private[imp] def extractId(argument: Class[_], annotation: Annotation) = {
+    if (annotation == null) {
+      BeanUtil.createBeanId(argument)
+
+    } else {
+      val rawId = annotation match {
+        case a: Autowiring => a.named
+        case c: Component => c.id
+        case s: Service => s.id
+        case c: Controller => c.id
+        case r: Repository => r.id
+      }
+
+      if (rawId.isEmpty) BeanUtil.createBeanId(argument) else rawId
+    }
+  }
+
+  private[imp] def isInjectable(method: Method) =
+    method.getParameterCount == 1 && (method.getModifiers & Modifier.PUBLIC) != 0 && method.getReturnType.getName.equals("void")
+
+
+  def loadXml(file: File): Elem = {
+    require(file != null, "file == null")
+    require(file.exists() && file.isFile && file.canRead,
+      s"""Couldn't read xml config file ${file.getAbsolutePath}:
+         |exists -${file.exists()},
+         |is file -${file.isFile},
+         |readable -${file.canRead}
+   """.stripMargin)
+
+    XML.loadFile(file)
   }
 
 }

@@ -11,7 +11,7 @@ public class ScannedClass {
     private final String var;
 
     public ScannedClass(@Autowiring(named = "greetingService") GreetingService greetingService,
-                        @Autowiring ScannedDependency dependency,
+                        ScannedDependency dependency,
                         @Autowiring(named = "someProp") String var) {
         this.greetingService = greetingService;
         this.dependency = dependency;
