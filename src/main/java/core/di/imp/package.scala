@@ -3,7 +3,7 @@ package core.di
 import java.io.File
 import java.lang
 import java.lang.annotation.Annotation
-import java.lang.reflect.{Method, Modifier}
+import java.lang.reflect.{Field, Method, Modifier}
 
 import core.di.annotation._
 
@@ -41,12 +41,12 @@ package object imp {
     override def getWrappedClass: Class[_ <: AnyRef] = wrapper
   }
 
-  private[imp] def extractId(argument: Class[_], annotation: Annotation) = {
-    if (annotation == null) {
+  private[imp] def extractId(argument: Class[_], annotation: Option[Annotation]) = {
+    if (annotation.isEmpty) {
       BeanUtil.createBeanId(argument)
 
     } else {
-      val rawId = annotation match {
+      val rawId = annotation get match {
         case a: Autowiring => a.named
         case c: Component => c.id
         case s: Service => s.id
@@ -61,6 +61,8 @@ package object imp {
   private[imp] def isInjectable(method: Method) =
     method.getParameterCount == 1 && (method.getModifiers & Modifier.PUBLIC) != 0 && method.getReturnType.getName.equals("void")
 
+  private[imp] def isInjectable(field: Field) =
+    (field.getModifiers & (Modifier.FINAL | Modifier.NATIVE | Modifier.STATIC)) == 0
 
   def loadXml(file: File): Elem = {
     require(file != null, "file == null")

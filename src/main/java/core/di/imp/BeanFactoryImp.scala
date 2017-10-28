@@ -61,9 +61,16 @@ final class BeanFactoryImp(declarations: Iterable[BeanDeclaration]) extends Bean
 
   private def instantiate[T <: AnyRef](c: Class[T], declaration: BeanDeclaration, beanChain: mutable.Set[String]) = {
     val bean = instantiateForConstructor(c, declaration, beanChain)
+    val dependencyResolver = (dependency: Dependency) => {
+      dependency.either match {
+        case Left(Property(_, value)) => value
+        case Right(BeanRef(id)) => instantiate(id)
+      }
+    }
     // injects declared dependencies
     // through declared setters
-    inject(bean, declaration)
+    injectSetters(bean, declaration, dependencyResolver)
+    injectFields(bean, declaration, dependencyResolver)
     bean
   }
 
@@ -71,7 +78,7 @@ final class BeanFactoryImp(declarations: Iterable[BeanDeclaration]) extends Bean
     require(!Modifier.isAbstract(c.getModifiers), s"Cannot instantiate abstract class $c, bean ${declaration.id}")
     require(!hasCyclicDependency(declaration, beanChain),
       s"""Cyclic dependency was found for constructor of bean: ${declaration.id},
-          |the dependency path was: ${beanChain.mkString("->")}
+         |the dependency path was: ${beanChain.mkString("->")}
        """.stripMargin)
 
     beanChain += declaration.id
@@ -102,8 +109,8 @@ final class BeanFactoryImp(declarations: Iterable[BeanDeclaration]) extends Bean
 
         require(argsMatching && matchingConstructor.isEmpty,
           s"""At least two constructors can be used to instantiate bean of class $c,
-              |the first - ${matchingConstructor.get.getParameterTypes}
-              |and the second one - ${constructor.getParameterTypes}""".stripMargin)
+             |the first - ${matchingConstructor.get.getParameterTypes}
+             |and the second one - ${constructor.getParameterTypes}""".stripMargin)
 
         if (argsMatching) {
           matchingConstructor = Option.apply(constructor.asInstanceOf[reflect.Constructor[T]])
@@ -114,16 +121,50 @@ final class BeanFactoryImp(declarations: Iterable[BeanDeclaration]) extends Bean
     }
   }
 
-  private def inject[T](bean: T, declaration: BeanDeclaration): Unit = {
-    val declared = declaration.dependencies.filter(dep => dep.scope != settings.Constructor)
+  private def injectSetters[T](bean: T, declaration: BeanDeclaration, resolver: (Dependency => AnyRef)): Unit = {
+    val setterDeps = declaration.dependencies collect {
+      case d: Dependency if (d.scope match {
+        case Setter(_) => true;
+        case _ => false
+      }) => d
+    }
 
-    for (dependency <- declared) {
-      val args = dependency.either match {
-        case Left(Property(classOf, value)) => (classOf, value)
-        case Right(BeanRef(id)) => val instance = instantiate(id); (instance.getClass, instance)
+    for (dependency <- setterDeps) {
+      dependency.scope.asInstanceOf[settings.Setter].method.invoke(bean, resolver(dependency))
+    }
+  }
+
+  private def injectFields[T](bean: T, declaration: BeanDeclaration, resolver: (Dependency => AnyRef)): Unit = {
+    val fieldDeps = declaration.dependencies collect {
+      case d: Dependency if (d.scope match {
+        case Field(_) => true;
+        case _ => false
+      }) => d
+    }
+
+    for (dependency <- fieldDeps) {
+      val field = dependency.scope.asInstanceOf[settings.Field].field
+      val isAccessible = field.isAccessible
+
+      if (!isAccessible) {
+        field.setAccessible(true)
       }
 
-      bean.getClass.getMethod(dependency.scope.asInstanceOf[Setter].field, args._1).invoke(bean, args._2)
+      try {
+        val fieldVal = Option(field.get(bean))
+        // after constructor and setter dependencies were injected
+        // we should inject instance fields. If field value is present,
+        // then it was injected before, which shouldn't happen.
+        require(fieldVal.isEmpty,
+          s"""Field of class ${bean.getClass} was already set either via constructor or via setter
+             |or has a default value
+           """.stripMargin)
+        field.set(bean, resolver(dependency))
+      } finally {
+        if (!isAccessible) {
+          field.setAccessible(isAccessible)
+        }
+      }
     }
   }
 
@@ -134,6 +175,7 @@ final class BeanFactoryImp(declarations: Iterable[BeanDeclaration]) extends Bean
       if (i == real.getParameterCount - 1) true
       else realArgs(i).isAssignableFrom(toCheckArgs(i).getClass) && isConstructorArgsMatching(i + 1)
     }
+
     isConstructorArgsMatching(0)
   }
 

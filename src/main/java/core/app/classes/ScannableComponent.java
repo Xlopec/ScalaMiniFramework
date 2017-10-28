@@ -3,9 +3,9 @@ package core.app.classes;
 import core.di.annotation.Component;
 
 @Component
-public class ScannedDependency {
+public class ScannableComponent {
 
-    public ScannedDependency() {}
+    public ScannableComponent() {}
 
     @Override
     public String toString() {

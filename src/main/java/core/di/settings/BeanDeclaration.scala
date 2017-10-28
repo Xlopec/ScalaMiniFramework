@@ -38,10 +38,12 @@ sealed trait InjectScope
 
 case object Constructor extends InjectScope
 
+final case class Field(field: java.lang.reflect.Field) extends InjectScope
+
 object Setter
 
-final case class Setter(field: String) extends InjectScope {
-  require(field != null && !field.isEmpty, "undefined field name")
+final case class Setter(method: java.lang.reflect.Method) extends InjectScope {
+  require(method != null, "undefined method")
 }
 
 sealed trait BeanScope

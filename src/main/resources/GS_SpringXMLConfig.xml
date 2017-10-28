@@ -6,7 +6,7 @@
 
     <property id="someProp" type="String" value="Some property value" />
 
-    <bean id="greetingService" scope="singleton" class="core.app.classes.GreetingServiceImpl">
+    <bean id="greetingService" scope="singleton" class="core.app.classes.service.GreetingServiceImpl">
         <constructor-arg type="String" value="Hello World!"/>
         <constructor-arg ref="bus"/>
         <property name="injectSomething" type="String" value="Whatever" />
@@ -21,7 +21,7 @@
         <property name="message" type="String" value="Transport type is Bus"/>
     </bean>
 
-    <bean id="cyclicGreetingService" class="core.app.classes.GreetingServiceImpl">
+    <bean id="cyclicGreetingService" class="core.app.classes.service.GreetingServiceImpl">
         <constructor-arg type="String" value="Hello World!"/>
         <constructor-arg ref="cyclicBus"/>
         <property name="injectSomething" type="String" value="Something" />

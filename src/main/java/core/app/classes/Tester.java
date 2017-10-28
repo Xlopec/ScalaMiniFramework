@@ -1,5 +1,8 @@
 package core.app.classes;
 
+import core.app.classes.beans.ScannableBean;
+import core.app.classes.service.GreetingService;
+import core.app.classes.service.GreetingServiceImpl;
 import core.di.BeanContext;
 import core.di.BeanFactory;
 import core.di.imp.XmlBeanContext;
@@ -25,11 +28,11 @@ public class Tester {
 
         ((GreetingServiceImpl)greetingService1).transportMessage();
 
-        final ScannedClass scannedClass1 = factory.instantiate("MyScannedClass");
-        final ScannedClass scannedClass2 = factory.instantiate("MyScannedClass");
+        final ScannableBean scannableBean1 = factory.instantiate("MyScannedClass");
+        final ScannableBean scannableBean2 = factory.instantiate("MyScannedClass");
 
-        System.out.println(String.format("Greeter says: %s", scannedClass1.greet()));
-        System.out.println(String.format("scannedClass singleton %b", scannedClass1 == scannedClass2));
+        System.out.println(String.format("Greeter says: %s", scannableBean1.toString()));
+        System.out.println(String.format("scannedClass singleton %b", scannableBean1 == scannableBean2));
     }
 
 }

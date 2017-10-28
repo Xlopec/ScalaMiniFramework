@@ -52,17 +52,17 @@ final class XmlParser extends DeclarationParser {
       require(isInjectable(method), s"Method $method isn't injectable")
 
       val cl = method.getParameterTypes()(0)
-      val autowiring = method.getAnnotation[Autowiring](classOf[Autowiring ])
-      val id = extractId(cl, autowiring)
+      val autowiring = method.getAnnotation[Autowiring](classOf[Autowiring])
+      val id = extractId(cl, Option(autowiring))
       val depType = typeMapping.get(cl.getSimpleName)
 
       if (depType.isEmpty) {
-        Dependency(Right(BeanRef(id)), Setter(method.getName))
+        Dependency(Right(BeanRef(id)), Setter(method))
       } else {
         // primitive type,
         // should be annotated
         require(autowiring != null, s"Primitive argument should be annotated with ${classOf[Autowiring]}")
-        Dependency(Left(context.variables(id)), Setter(method.getName))
+        Dependency(Left(context.variables(id)), Setter(method))
       }
     }
 
@@ -88,9 +88,9 @@ final class XmlParser extends DeclarationParser {
         val field = if (isEq) name else capitalized
 
         if (isReferenceType(attributes)) {
-          dependency = Dependency(Right(BeanRef(attributes.get("ref").get.text)), Setter(field))
+          dependency = Dependency(Right(BeanRef(attributes.get("ref").get.text)), Setter(method))
         } else {
-          dependency = parsePrimitive(node, context, Setter(field))
+          dependency = parsePrimitive(node, context, Setter(method))
         }
       }
     }
@@ -121,7 +121,7 @@ final class XmlParser extends DeclarationParser {
 
     val dependencies = for (param <- foundConstructor.getParameters) yield {
       val autowiring = param.getAnnotation[Autowiring](classOf[Autowiring])
-      val id = extractId(param.getType, autowiring)
+      val id = extractId(param.getType, Option(autowiring))
       val depType = typeMapping.get(param.getType.getSimpleName)
 
       if (depType.isDefined) {
