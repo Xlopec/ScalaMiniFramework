@@ -5,7 +5,9 @@
            http://www.springframework.org/schema/beans/spring-beans-3.0.xsd">
 
     <!-- Some server props -->
-    <property id="port" type="int" value="9090" />
-    <component-scan base-package="core.app.webapp.server" />
+    <property id="port" type="int" value="9090"/>
+    <property id="host" type="String" value="127.0.0.1"/>
+
+    <component-scan base-package="core.app.webapp"/>
 
 </beans>

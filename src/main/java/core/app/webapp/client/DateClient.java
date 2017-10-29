@@ -1,10 +1,11 @@
 package core.app.webapp.client;
 
-import java.io.BufferedReader;
+import core.di.BeanContext;
+import core.di.BeanFactory;
+import core.di.imp.XmlBeanContext;
+
+import java.io.File;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.net.Socket;
-import java.util.Arrays;
 
 /**
  * Trivial client for the date server.
@@ -18,23 +19,10 @@ public class DateClient {
      * it serves.
      */
     public static void main(String[] args) throws IOException {
-        final String serverAddress;
+        final BeanContext context = new XmlBeanContext(new File("/Users/max/IdeaProjects/ScalaMiniFramework/src/main/resources/ServerConfig.xml"));
+        final BeanFactory factory = context.getBeanFactory();
+        final Client client = factory.instantiate(Client.class);
 
-        if (args == null || args.length == 0) {
-            serverAddress = "127.0.0.1";
-        } else {
-            if (args.length != 1) {
-                throw new IllegalArgumentException(String.format("Invalid input args, were %s", Arrays.toString(args)));
-            }
-            serverAddress = args[0];
-        }
-
-        Socket s = new Socket(serverAddress, 9090);
-        BufferedReader input =
-                new BufferedReader(new InputStreamReader(s.getInputStream()));
-        String answer = input.readLine();
-
-        System.out.println(answer);
-        System.exit(0);
+        client.connect();
     }
 }

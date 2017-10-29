@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.Date;
 
 @Component
 public final class Server {
@@ -22,14 +23,20 @@ public final class Server {
     public void start() throws IOException {
         stop();
         listener = new ServerSocket(port);
+        System.out.println(String.format("Server is listening on the port: %d", port));
 
         try {
             while (true) {
-                Socket socket = listener.accept();
+                final Socket socket = listener.accept();
+
                 try {
-                    PrintWriter out =
+                    final PrintWriter out =
                             new PrintWriter(socket.getOutputStream(), true);
-                    out.println(service.getCurrentDate().toString());
+
+                    final Date date = service.getCurrentDate();
+
+                    System.out.println(String.format("Returning date to the client %s", date));
+                    out.println(date.toString());
                 } finally {
                     socket.close();
                 }
