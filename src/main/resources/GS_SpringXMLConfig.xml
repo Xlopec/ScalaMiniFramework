@@ -33,7 +33,7 @@
 
     <bean id="car" class="core.app.classes.Car">
         <constructor-arg type="String" value="Ferrari"/>
-        <constructor-arg type="int" value="4"/>
+        <constructor-arg type="int" value="5"/>
     </bean>
 
     <interceptor id="interceptor1" class="application.classes.CapitalizingInterceptor"/>

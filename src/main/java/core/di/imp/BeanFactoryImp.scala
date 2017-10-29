@@ -3,6 +3,7 @@ package core.di.imp
 import java.lang.reflect
 import java.lang.reflect.{Constructor, Modifier}
 
+import core.di.annotation.Autowiring
 import core.di.{BeanFactory, settings}
 import core.di.settings._
 
@@ -59,7 +60,7 @@ final class BeanFactoryImp(declarations: Iterable[BeanDeclaration]) extends Bean
     }
   }
 
-  private def instantiate[T <: AnyRef](c: Class[T], declaration: BeanDeclaration, beanChain: mutable.Set[String]) = {
+  private def instantiate[T <: AnyRef](c: Class[T], declaration: BeanDeclaration, beanChain: mutable.Set[String]): T = {
     val bean = instantiateForConstructor(c, declaration, beanChain)
     val dependencyResolver = (dependency: Dependency) => {
       dependency.either match {
@@ -102,23 +103,46 @@ final class BeanFactoryImp(declarations: Iterable[BeanDeclaration]) extends Bean
         case Right(BeanRef(id)) => instantiate(id, beanChain)
       })
 
-      var matchingConstructor: Option[reflect.Constructor[T]] = Option.empty
+      val matchingConstructor = findMatchingConstructor(matchingConstructors, args)
 
-      for (constructor <- matchingConstructors) {
-        val argsMatching = isMatchingArgs(args, constructor)
-
-        require(argsMatching && matchingConstructor.isEmpty,
-          s"""At least two constructors can be used to instantiate bean of class $c,
-             |the first - ${matchingConstructor.get.getParameterTypes}
-             |and the second one - ${constructor.getParameterTypes}""".stripMargin)
-
-        if (argsMatching) {
-          matchingConstructor = Option.apply(constructor.asInstanceOf[reflect.Constructor[T]])
-        }
-      }
       require(matchingConstructor.isDefined, s"Couldn't find suitable constructor for bean $c")
       matchingConstructor.get.newInstance(args: _*)
     }
+  }
+
+  private def findMatchingConstructor[T <: AnyRef](constructors: Array[Constructor[_]], args: List[AnyRef]) = {
+
+    def loop(i: Int, previous: Option[Constructor[T]]): Option[Constructor[T]] = {
+      if (i == constructors.length) {
+        previous
+      } else {
+        val constructor = constructors(i)
+        val argsMatching = isMatchingArgs(args, constructor)
+
+        if (argsMatching) {
+          if (previous.isDefined) {
+            // previous constructor shouldn't be annotated;
+            // in this case only one annotated constructor is acceptable
+            require(!previous.get.isAnnotationPresent(classOf[Autowiring])
+              && constructor.isAnnotationPresent(classOf[Autowiring]),
+              s"""At least two constructors can be used to instantiate bean of class,
+                 |the first - ${previous.get.getParameterTypes.toList}
+                 |and the second one - ${constructor.getParameterTypes.toList}.
+                 |Use ${classOf[Autowiring].getTypeName} annotation to choose which one to use,
+                 |but only once""".stripMargin)
+            // we've found constructor to inject,
+            // we can ignore all other
+            Option.apply(constructor.asInstanceOf[reflect.Constructor[T]])
+          } else {
+            loop(i + 1, Option.apply(constructor.asInstanceOf[reflect.Constructor[T]]))
+          }
+        } else {
+          loop(i + 1, previous)
+        }
+      }
+    }
+
+    loop(0, Option.empty)
   }
 
   private def injectSetters[T](bean: T, declaration: BeanDeclaration, resolver: (Dependency => AnyRef)): Unit = {
@@ -171,9 +195,11 @@ final class BeanFactoryImp(declarations: Iterable[BeanDeclaration]) extends Bean
   private def isMatchingArgs(toCheckArgs: List[AnyRef], real: Constructor[_]) = {
     val realArgs = real.getParameterTypes
 
+    def wrap(i: Int) = primitiveToWrapper get realArgs(i).getTypeName map (v => v.getWrappedClass) getOrElse realArgs(i)
+
     def isConstructorArgsMatching(i: Int): Boolean = {
       if (i == real.getParameterCount - 1) true
-      else realArgs(i).isAssignableFrom(toCheckArgs(i).getClass) && isConstructorArgsMatching(i + 1)
+      else wrap(i).isAssignableFrom(toCheckArgs(i).getClass) && isConstructorArgsMatching(i + 1)
     }
 
     isConstructorArgsMatching(0)

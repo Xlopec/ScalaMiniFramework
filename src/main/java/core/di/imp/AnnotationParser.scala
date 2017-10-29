@@ -17,6 +17,8 @@ import scala.xml.Node
 
 final class AnnotationParser extends DeclarationParser {
 
+  final case class BeanContext(cl: Class[_], settingsContext: Context, reflections: Reflections)
+
   override def parse(context: Context): Iterable[BeanDeclaration] = {
     val scanSettings = (context.xml \ "component-scan").map(parseScanSetting).toList
 
@@ -44,48 +46,51 @@ final class AnnotationParser extends DeclarationParser {
       reflections.getTypesAnnotatedWith(classOf[Controller], true) ++ reflections.getTypesAnnotatedWith(classOf[Repository], true)
 
     for (t <- scannableTypes) {
-      beanDeclarations += createBeanDeclaration(t.asInstanceOf[Class[_ <: AnyRef]], context)
+      beanDeclarations += createBeanDeclaration(BeanContext(t.asInstanceOf[Class[_ <: AnyRef]], context, reflections))
     }
 
     beanDeclarations
   }
 
-  private def createBeanDeclaration(cl: Class[_ <: AnyRef], context: Context) = {
-    val a = cl.getAnnotation(classOf[Component])
-    val id = extractId(cl, Option(a))
-    val scope = if (cl.isAnnotationPresent(classOf[core.di.annotation.Singleton])) settings.Singleton else PerInject
+  private def createBeanDeclaration(context: BeanContext) = {
+    val id = extractId(context.cl.getAnnotations, BeanUtil.createBeanId(context.cl))
+    val scope = if (context.cl.isAnnotationPresent(classOf[core.di.annotation.Singleton])) settings.Singleton else PerInject
 
-    BeanDeclaration(id, cl, scope, parseDependencies(cl, context))
+    BeanDeclaration(id, context.cl.asInstanceOf[Class[_ <: AnyRef]], scope, parseDependencies(context))
   }
 
-  private def parseDependencies(classOf: Class[_ <: AnyRef], context: Context): List[Dependency] =
-    parseConstructorDeps(classOf, context) ++ parseSetterDeps(classOf, context) ++ parseFieldDeps(classOf, context)
+  private def parseDependencies(context: BeanContext): List[Dependency] =
+    parseConstructorDeps(context) ++ parseSetterDeps(context) ++ parseFieldDeps(context)
 
-  private def parseConstructorDeps(cl: Class[_ <: AnyRef], context: Context) = {
-    val constructors = cl.getConstructors
+  private def parseConstructorDeps(context: BeanContext) = {
+    val constructors = context.cl.getConstructors
 
-    require(constructors.nonEmpty, s"No public constructors found for bean $cl")
+    require(constructors.nonEmpty, s"No public constructors found for bean ${context.cl}")
 
-    var matches = 0
-    var foundConstructor: Constructor[_] = null
+    var annotations = 0
+    var foundConstructor: Option[Constructor[_]] = Option.empty
 
     for (constructor <- constructors) {
-      if (matches == 0 || constructor.isAnnotationPresent(classOf[Autowiring])) {
-        foundConstructor = constructor
-        matches += 1
+      if (foundConstructor.isEmpty) {
+        foundConstructor = Option(constructor)
+      }
+
+      if (constructor.isAnnotationPresent(classOf[Autowiring])) {
+        annotations += 1
+        foundConstructor = Option(constructor)
       }
     }
 
-    require(matches == 1,
-      s"""Found $matches constructors, annotated with ${classOf[Autowiring].getClass.getName}
-         |annotation while only one is required""".stripMargin)
+    require(constructors.length == 1 || (constructors.length > 1 && annotations == 1),
+      s"""Accessible constructor is required and(or) annotated with ${classOf[Autowiring].getTypeName},
+         |but only one""".stripMargin)
 
-    foundConstructor.getParameters
-      .map(param => extractDependency(Option(param.getAnnotation[Autowiring](classOf[Autowiring])), param.getType, context, settings.Constructor))
+    foundConstructor.get.getParameters
+      .map(param => extractDependency(Option(param.getAnnotation[Autowiring](classOf[Autowiring])), BeanContext(param.getType, context.settingsContext, context.reflections), settings.Constructor))
       .toList
   }
 
-  private def parseFieldDeps(cl: Class[_ <: AnyRef], context: Context) = {
+  private def parseFieldDeps(context: BeanContext) = {
     val filter = (f: Field) => {
       val isAnnotated = f.isAnnotationPresent(classOf[Autowiring])
 
@@ -99,67 +104,61 @@ final class AnnotationParser extends DeclarationParser {
       isAnnotated
     }
 
-    cl.getDeclaredFields
+    context.cl.getDeclaredFields
       .filter(filter)
-      .map(f => extractDependency(Option(f.getAnnotation[Autowiring](classOf[Autowiring])), f.getType, context, settings.Field(f)))
+      .map(f => extractDependency(Option(f.getAnnotation[Autowiring](classOf[Autowiring])), BeanContext(f.getType, context.settingsContext, context.reflections), settings.Field(f)))
       .toList
   }
 
-  private def parseSetterDeps(cl: Class[_ <: AnyRef], context: Context) = {
-    val dependencies = for (method <- cl.getMethods if method.isAnnotationPresent(classOf[Autowiring])) yield {
-      require(isInjectable(method), s"Method $method isn't injectable")
-
-      val cl = method.getParameterTypes()(0)
-      val autowiring = Option(method.getAnnotation[Autowiring](classOf[Autowiring]))
-      val id = extractId(cl, autowiring)
-      val depType = typeMapping.get(cl.getSimpleName)
-
-      if (depType.isEmpty) {
-        Dependency(Right(BeanRef(id)), Setter(method))
-      } else {
-        // primitive type,
-        // should be annotated
-        require(autowiring != null, s"Primitive argument should be annotated with ${classOf[Autowiring]}")
-        Dependency(Left(context.variables(id)), Setter(method))
-      }
-    }
-
-    dependencies toList
+  private def parseSetterDeps(context: BeanContext) = {
+    context.cl.getMethods
+      .filter(m => m.isAnnotationPresent(classOf[Autowiring]))
+      .map(m => extractDependency(Option(m.getAnnotation[Autowiring](classOf[Autowiring])), BeanContext(m.getParameterTypes()(0), context.settingsContext, context.reflections), Setter(m)))
+      .toList
   }
 
-  private def extractDependency(autowiring: Option[Autowiring], cl: Class[_], context: Context, scope: InjectScope) = {
-    val id = extractId(cl, autowiring)
-    val depType = typeMapping.get(cl.getSimpleName)
+  private def extractDependency(autowiring: Option[Autowiring], context: BeanContext, scope: InjectScope) = {
+    var id: Option[String] = Option.empty
+
+    if (autowiring.isDefined && autowiring.get.named().nonEmpty) {
+      // short path, just extract id
+      id = Option(extractId(autowiring))
+    } else {
+      require(!primitiveToWrapper.contains(context.cl.getTypeName),
+        s"""Primitive type should always have fully qualified id.
+           |See scope: $scope""".stripMargin)
+      // long path, try to find single concrete class which inherits given one
+      if (autowiring.isDefined && isConcrete(context.cl)) {
+        // can generate id
+        id = Option(BeanUtil.createBeanId(context.cl))
+      } else {
+        // in any other case scan for annotated subtypes of a given class
+        val candidates = context.reflections.getSubTypesOf(context.cl)
+          .filter(cl => isConcrete(cl) && scanAnnotation.intersect(cl.getDeclaredAnnotations.map(a => a.annotationType())).nonEmpty) toList
+
+        id = candidates.length match {
+          case 0 => throw new IllegalStateException(
+            s"""No candidates found for inject for class ${context.cl}
+               ||Scope: $scope""".stripMargin)
+          case 1 => Option(BeanUtil.createBeanId(candidates.head))
+          case _ => throw new IllegalStateException(
+            s"""Found multiple candidates for class ${context.cl} to inject: $candidates.
+               |Scope: $scope""".stripMargin)
+        }
+      }
+    }
+    require(id.isDefined, s"Couldn't find suitable candidate for injection for bean ${context.cl}, scope: $scope")
+    createDependency(id.get, context, scope)
+  }
+
+  private def createDependency(id: String, context: BeanContext, scope: InjectScope) = {
+    val depType = primitiveToWrapper.get(context.cl.getSimpleName)
 
     if (depType.isDefined) {
-      // primitive type,
-      // should be annotated
-      require(autowiring != null, s"Primitive argument should be annotated with ${classOf[Autowiring]}")
-      Dependency(Left(context.variables(id)), scope)
+      Dependency(Left(context.settingsContext.variables(id)), scope)
     } else {
       Dependency(Right(BeanRef(id)), scope)
     }
   }
-
-  /*private def checkCollisions(dependencies: Iterable[Dependency]) = {
-    val eitherMap = dependencies.map(d => d.either).groupBy(e => e.isLeft) map { case (isLeft, coll) => {
-      if (isLeft) {
-        (isLeft, coll.map(e => e.left.get))
-      } else {
-        (isLeft, coll.map(e => e.right.get))
-      }
-    }
-    }
-
-
-
-    if (eitherMap.contains(true)) {
-      eitherMap(true).map(e => e.asInstanceOf[Property]).groupBy(p => p.)
-    }
-
-    if (eitherMap.contains(false)) {
-
-    }
-  }*/
 
 }

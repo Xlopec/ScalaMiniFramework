@@ -26,7 +26,7 @@ final class XmlConfigParser(file: File, parsers: Iterable[DeclarationParser]) ex
       s"""Not found attribute, named 'type'
          |in node $node""".stripMargin)
 
-    val pair = typeMapping.getOrElse(typeOpt.get.text, throw new RuntimeException(s"Not found type for ${typeOpt.get.text}"))
+    val pair = primitiveToWrapper.getOrElse(typeOpt.get.text, throw new RuntimeException(s"Not found type for ${typeOpt.get.text}"))
 
     (id, Property(pair.getWrappedClass, pair.transform(valueOpt.get.text)))
   }

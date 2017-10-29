@@ -53,8 +53,8 @@ final class XmlParser extends DeclarationParser {
 
       val cl = method.getParameterTypes()(0)
       val autowiring = method.getAnnotation[Autowiring](classOf[Autowiring])
-      val id = extractId(cl, Option(autowiring))
-      val depType = typeMapping.get(cl.getSimpleName)
+      val depType = primitiveToWrapper.get(cl.getSimpleName)
+      val id = extractId(autowiring, BeanUtil.createBeanId(cl))
 
       if (depType.isEmpty) {
         Dependency(Right(BeanRef(id)), Setter(method))
@@ -121,8 +121,8 @@ final class XmlParser extends DeclarationParser {
 
     val dependencies = for (param <- foundConstructor.getParameters) yield {
       val autowiring = param.getAnnotation[Autowiring](classOf[Autowiring])
-      val id = extractId(param.getType, Option(autowiring))
-      val depType = typeMapping.get(param.getType.getSimpleName)
+      val id = extractId(autowiring, BeanUtil.createBeanId(cl))
+      val depType = primitiveToWrapper.get(param.getType.getSimpleName)
 
       if (depType.isDefined) {
         // primitive type,
@@ -160,7 +160,7 @@ final class XmlParser extends DeclarationParser {
         s"""Not found attribute, named 'type'
            |in node $node""".stripMargin)
 
-      val pair = typeMapping.getOrElse(typeOpt.get.text, throw new RuntimeException(s"Not found type for ${typeOpt.get.text}"))
+      val pair = primitiveToWrapper.getOrElse(typeOpt.get.text, throw new RuntimeException(s"Not found type for ${typeOpt.get.text}"))
 
       Dependency(Left(Property(pair.getWrappedClass, pair.transform(valueOpt.get.text))), scope)
     }
