@@ -19,7 +19,7 @@ final class AnnotationParser extends DeclarationParser {
 
   final case class BeanContext(cl: Class[_], settingsContext: Context, reflections: Reflections)
 
-  override def parse(context: Context): Iterable[BeanDeclaration] = {
+  override def parse(context: Context): Set[BeanDeclaration] = {
     val scanSettings = (context.xml \ "component-scan").map(parseScanSetting).toList
 
     resolveScannedBeans(scanSettings, context)
@@ -41,7 +41,7 @@ final class AnnotationParser extends DeclarationParser {
       .setScanners(new SubTypesScanner(false), new TypeAnnotationsScanner())
       .filterInputsBy(new FilterBuilder().includePackage(packages: _*)))
 
-    val beanDeclarations = new mutable.MutableList[BeanDeclaration]
+    val beanDeclarations = mutable.Set[BeanDeclaration]()
     val scannableTypes = reflections.getTypesAnnotatedWith(classOf[Component], true) ++ reflections.getTypesAnnotatedWith(classOf[Service], true) ++
       reflections.getTypesAnnotatedWith(classOf[Controller], true) ++ reflections.getTypesAnnotatedWith(classOf[Repository], true)
 
@@ -49,7 +49,7 @@ final class AnnotationParser extends DeclarationParser {
       beanDeclarations += createBeanDeclaration(BeanContext(t.asInstanceOf[Class[_ <: AnyRef]], context, reflections))
     }
 
-    beanDeclarations
+    beanDeclarations toSet
   }
 
   private def createBeanDeclaration(context: BeanContext) = {
@@ -83,11 +83,15 @@ final class AnnotationParser extends DeclarationParser {
 
     require(constructors.length == 1 || (constructors.length > 1 && annotations == 1),
       s"""Accessible constructor is required and(or) annotated with ${classOf[Autowiring].getTypeName},
-         |but only one""".stripMargin)
+         |but only one for bean ${context.cl}""".stripMargin)
 
-    foundConstructor.get.getParameters
-      .map(param => extractDependency(Option(param.getAnnotation[Autowiring](classOf[Autowiring])), BeanContext(param.getType, context.settingsContext, context.reflections), settings.Constructor))
-      .toList
+    if (foundConstructor.get.getParameters.length == 0) {
+      List()
+    } else {
+      foundConstructor.get.getParameters
+        .map(param => extractDependency(Option(param.getAnnotation[Autowiring](classOf[Autowiring])), BeanContext(param.getType, context.settingsContext, context.reflections), settings.Constructor))
+        .toList
+    }
   }
 
   private def parseFieldDeps(context: BeanContext) = {
@@ -128,7 +132,7 @@ final class AnnotationParser extends DeclarationParser {
         s"""Primitive type should always have fully qualified id.
            |See scope: $scope""".stripMargin)
       // long path, try to find single concrete class which inherits given one
-      if (autowiring.isDefined && isConcrete(context.cl)) {
+      if (autowiring.isDefined || isConcrete(context.cl)) {
         // can generate id
         id = Option(BeanUtil.createBeanId(context.cl))
       } else {

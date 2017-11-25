@@ -3,6 +3,7 @@ package core.di
 import core.di.imp.Context
 import core.di.settings._
 
+import scala.collection.mutable
 import scala.xml.Elem
 
 /**
@@ -13,9 +14,26 @@ abstract class ConfigParser(xml: Elem, val parsers: Iterable[DeclarationParser])
 
   def parse(): ContextSettings = {
     val context = Context(xml, parseVariables(xml))
-    val declarations = for (parser <- parsers) yield parser.parse(context)
+    val declarations = mutable.Set[BeanDeclaration]()
 
-    ContextSettings(declarations.foldLeft(List[BeanDeclaration]())((prev, item) => prev ++ item.iterator))
+    def collectCollisions(collector: mutable.Set[BeanDeclaration], collected: Set[BeanDeclaration]) = {
+      collector map (d => d.id) intersect (collected map (b => b.id))
+    }
+
+    for (parser <- parsers) {
+      val parsed = parser.parse(context)
+
+      val collisions = collectCollisions(declarations, parsed.toSet)
+
+      require(collisions.isEmpty,
+        s"""Found collisions while parsing bean declarations,
+           |please, check bean ${collisions.mkString}
+        """.stripMargin)
+
+      declarations ++= parser.parse(context)
+    }
+
+    ContextSettings(declarations)
   }
 
   protected def parseVariables(xml: Elem): Map[String, Property]
@@ -23,5 +41,5 @@ abstract class ConfigParser(xml: Elem, val parsers: Iterable[DeclarationParser])
 }
 
 trait DeclarationParser {
-  def parse(context: Context): Iterable[BeanDeclaration]
+  def parse(context: Context): Set[BeanDeclaration]
 }

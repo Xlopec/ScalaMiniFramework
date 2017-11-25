@@ -14,8 +14,8 @@ import scala.xml.{Elem, MetaData, Node}
   */
 final class XmlParser extends DeclarationParser {
 
-  override def parse(context: Context): Iterable[BeanDeclaration] =
-    context.xml \ "bean" map (node => parseBeanDeclaration(node, context)) toList
+  override def parse(context: Context): Set[BeanDeclaration] =
+    context.xml \ "bean" map (node => parseBeanDeclaration(node, context)) toSet
 
   private def parseBeanDeclaration(node: Node, context: Context) = {
     val id = node \ "@id" text

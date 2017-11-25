@@ -28,8 +28,8 @@ public class Tester {
 
         ((GreetingServiceImpl)greetingService1).transportMessage();
 
-        final ScannableBean scannableBean1 = factory.instantiate("MyScannedClass");
-        final ScannableBean scannableBean2 = factory.instantiate("MyScannedClass");
+        final ScannableBean scannableBean1 = factory.instantiate(ScannableBean.class);
+        final ScannableBean scannableBean2 = factory.instantiate(ScannableBean.class);
 
         System.out.println(String.format("Greeter says: %s", scannableBean1.toString()));
         System.out.println(String.format("scannedClass singleton %b", scannableBean1 == scannableBean2));

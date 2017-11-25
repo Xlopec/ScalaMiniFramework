@@ -16,7 +16,7 @@ import static org.junit.Assert.assertEquals;
 
 public class XmlAppContextTest {
 
-    private final File xmlFilePath = new File("D:\\Workspace Intellij Idea\\ScalaFramework\\src\\main\\resources\\GS_SpringXMLConfig.xml");
+    private final File xmlFilePath = new File("/Users/max/IdeaProjects/ScalaMiniFramework/src/main/resources/GS_SpringXMLConfig.xml");
 
     @Rule
     public final ExpectedException rule = ExpectedException.none();
