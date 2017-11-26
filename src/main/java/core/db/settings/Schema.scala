@@ -141,7 +141,7 @@ object ToOneProperty {
     require(toOne != null)
 
     val joinEntity = toOne.joinedEntity()
-    val keyAnnotation = imp.findFieldWithAnnotation(joinEntity, classOf[Id])
+    val keyAnnotation = imp.findFieldWithAnnotationExact(joinEntity, classOf[Id])
 
     require(keyAnnotation.isDefined, s"Missing ${classOf[Id]} annotation in entity $joinEntity")
 
@@ -159,31 +159,16 @@ object ToManyProperty {
   def apply(field: java.lang.reflect.Field): ToManyProperty = {
     val toMany = field.getAnnotation(classOf[ToMany])
 
-    require(toMany != null)
+    require(toMany != null, s"Missing ${classOf[ToMany]} annotation for field $field")
 
     val joinEntity = toMany.joinedEntity()
-    val keyAnnotation = imp.findFieldWithAnnotation(joinEntity, classOf[Id])
+    val toOneAnnotation = imp.findFieldWithAnnotationExact(joinEntity, classOf[ToOne])
 
-    require(keyAnnotation.isDefined, s"Missing ${classOf[ToMany]} annotation in entity $joinEntity")
+    require(toOneAnnotation.isDefined, s"Missing ${classOf[ToMany]} annotation in entity $joinEntity")
 
-    val referencedField = keyAnnotation.get._1
+    val referencedField = toOneAnnotation.get._1
 
-    /*val fieldType = field.getType match {
-      case c: Class[java.util.List[_]] => {
-        val gg = c.getGenericInterfaces()(0)
-
-        val pp = gg.asInstanceOf[ParameterizedType].getActualTypeArguments()(0)
-
-        val tt = pp.getTypeName
-
-        val cc = pp.getClass
-
-        cc
-      }
-      case t => t
-    }*/
-
-    ToManyProperty(field, field.getName.toUpperCase, Key.createName(referencedField, keyAnnotation.get._2),
+    ToManyProperty(field, field.getName.toUpperCase, referencedField.getName.toUpperCase,
       Schema.tableName(joinEntity), toMany.joinedEntity().asInstanceOf[Class[_ <: AnyRef]], referencedField.getType)
   }
 
@@ -196,15 +181,20 @@ object JoiningProperty {
 
     require(joinOn != null, s"Missing ${classOf[JoinEntity]} annotation")
 
+    val sourceToOnes = imp.findFieldWithAnnotation(joinOn.joiningEntity(), classOf[ToOne]).toArray
+
+    require(sourceToOnes.length == 2)
+
     JoiningProperty(field, field.getName.toUpperCase, joinOn.sourceProperty(), joinOn.targetProperty(),
+      Schema.tableName(joinOn.joiningEntity()), ToOneProperty(sourceToOnes(0)), ToOneProperty(sourceToOnes(1)),
       field.getType.asInstanceOf[Class[_ <: AnyRef]], joinOn.joiningEntity().asInstanceOf[Class[_ <: AnyRef]])
   }
 
 }
 
-final case class Key private(field: java.lang.reflect.Field, name: String, autoIncrement: Boolean, definition: Option[String]) extends BaseColumn(field, name)
+final case class Key private(field: java.lang.reflect.Field, override val name: String, autoIncrement: Boolean, definition: Option[String]) extends BaseColumn(field, name)
 
-final case class Column private(field: java.lang.reflect.Field, name: String, nullable: Boolean, definition: Option[String]) extends BaseColumn(field, name)
+final case class Column private(field: java.lang.reflect.Field, override val name: String, nullable: Boolean, definition: Option[String]) extends BaseColumn(field, name)
 
 /**
   * Foreign column representation
@@ -217,23 +207,24 @@ final case class Column private(field: java.lang.reflect.Field, name: String, nu
   * @param backedType           this column type
   * @param backedReferencedType referenced column type
   */
-final case class ToOneProperty private(field: java.lang.reflect.Field, name: String, foreignColumn: String, foreignTable: String,
+final case class ToOneProperty private(field: java.lang.reflect.Field, override val name: String, foreignColumn: String, foreignTable: String,
                                        nullable: Boolean, override val backedType: Class[_ <: AnyRef], backedReferencedType: Class[_]) extends BaseColumn(field, name) {
   require(foreignTable != null)
   require(backedReferencedType != null)
 }
 
-final case class ToManyProperty private(field: java.lang.reflect.Field, name: String, foreignColumn: String, foreignTable: String,
+final case class ToManyProperty private(field: java.lang.reflect.Field, override val name: String, foreignColumn: String, foreignTable: String,
                                         override val backedType: Class[_ <: AnyRef], backedReferencedType: Class[_]) extends BaseColumn(field, name) {
   require(foreignTable != null)
   require(backedReferencedType != null)
 }
 
-final case class JoiningProperty private(field: java.lang.reflect.Field, name: String, sourceProperty: String, targetProperty: String,
+final case class JoiningProperty private(field: java.lang.reflect.Field, override val name: String, sourceProperty: String, targetProperty: String,
+                                         table: String, sourceToOne: ToOneProperty, targetToOne: ToOneProperty,
                                          override val backedType: Class[_ <: AnyRef], backedTableType: Class[_ <: AnyRef]) extends BaseColumn(field, name) {
 }
 
-sealed abstract class BaseColumn protected(backedField: java.lang.reflect.Field, name: String) {
+sealed abstract class BaseColumn protected(val backedField: java.lang.reflect.Field, val name: String) {
   require(backedField != null)
   require(name != null)
 

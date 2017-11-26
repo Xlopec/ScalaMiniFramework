@@ -1,7 +1,7 @@
 package core.db.imp
 
 import java.sql
-import java.sql.DriverManager
+import java.sql.{DriverManager, ResultSet}
 
 import core.db.Connection
 import core.db.exception.DbException
@@ -16,10 +16,7 @@ final class JdbcConnection(settings: ConnectionSettings) extends Connection {
 
   override def execSql(sql: String): Unit = {
     require(connection != null)
-
-    if (settings.verbose) {
-      println(s"exec sql: $sql")
-    }
+    log(sql)
     connection.createStatement().execute(sql)
   }
 
@@ -42,4 +39,17 @@ final class JdbcConnection(settings: ConnectionSettings) extends Connection {
       connection.close()
     }
   }
+
+  override def query(sql: String): ResultSet = {
+    require(connection != null)
+    log(sql)
+    connection.createStatement().executeQuery(sql)
+  }
+
+  private def log(sql: String): Unit = {
+    if (settings.verbose) {
+      println(s"exec sql: $sql")
+    }
+  }
+
 }

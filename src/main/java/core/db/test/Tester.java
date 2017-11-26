@@ -1,5 +1,6 @@
 package core.db.test;
 
+import core.db.Dao;
 import core.db.DaoManager;
 import core.di.BeanContext;
 import core.di.BeanFactory;
@@ -15,7 +16,10 @@ public class Tester {
         final BeanFactory factory = context.getBeanFactory();
         final DaoManager daoManager = factory.instantiate(DaoManager.class);
 
-        daoManager.getDao(Student.class);
+        final Dao<Student, Long> dao = daoManager.getDao(Student.class);
+        final Student student = dao.read(1L);
+
+        System.out.println(student);
     }
 
 }

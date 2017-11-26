@@ -28,4 +28,16 @@ public final class Student {
     @JoinEntity(joiningEntity = JoinTable.class, sourceProperty = "STUDENT_ID", targetProperty = "SOMETHING_ID")
     private List<Something> somethings;
 
+    @Override
+    public String toString() {
+        return "Student{" +
+                "id=" + id +
+                ", firstName='" + firstName + '\'' +
+                ", lastName='" + lastName + '\'' +
+                ", yearOfStudy=" + yearOfStudy +
+                ", supervisor=" + supervisor +
+                ", lessons=" + lessons +
+                ", somethings=" + somethings +
+                '}';
+    }
 }
