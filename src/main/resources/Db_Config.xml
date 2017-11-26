@@ -8,7 +8,7 @@
     <property id="driver" type="String" value="com.mysql.jdbc.Driver" />
     <property id="user" type="String" value="root" />
     <property id="password" type="String" value="qwerty" />
-
+    <property id="verbose" type="boolean" value="true" />
 
     <component-scan base-package="core.db" />
 

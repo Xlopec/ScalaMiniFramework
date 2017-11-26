@@ -1,9 +1,9 @@
 package core.db.imp
 
-import core.db.settings.Entity
-import core.db.{Connection, Dao}
+import core.db.settings.Schema
+import core.db.{Connection, Dao, DaoManager}
 
-class BaseDaoImp[E <: AnyRef, K](val connection: Connection, val entity: Entity) extends Dao[E, K] {
+class BaseDaoImp[E <: AnyRef, K](private val connection: Connection, val entity: Schema, val daoManager: DaoManager) extends Dao[E, K] {
 
   override def create(entity: E): K = ???
 

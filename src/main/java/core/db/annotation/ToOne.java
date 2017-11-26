@@ -10,7 +10,5 @@ import java.lang.annotation.Target;
 public @interface ToOne {
     Class<?> joinedEntity();
 
-    String joinColumn();
-
     boolean nullable() default false;
 }

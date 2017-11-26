@@ -1,8 +1,10 @@
 package core.db
 
 import java.lang
+import java.lang.annotation.Annotation
+import java.lang.reflect.Field
 
-import core.db.settings.{Column, ForeignColumn, Key}
+import core.db.settings.{Column, ToOneProperty, Key}
 
 package object imp {
 
@@ -12,11 +14,35 @@ package object imp {
     "long" -> "BIGINT", "int" -> "INT", "String" -> "TEXT", "double" -> "DOUBLE", "byte" -> "TINYINT",
     "boolean" -> "BOOL")
 
+  def findAnnotatedField(cl: Class[_], annotation: Class[_ <: Annotation]): Option[Field] = {
+    val fields = cl.getDeclaredFields
+
+    def lookup(i: Int): Option[Field] = {
+      if (i + 1 >= fields.length) Option.empty
+      else if (fields(i).getAnnotation(annotation) != null) Option(fields(i))
+      else lookup(i + 1)
+    }
+
+    lookup(0)
+  }
+
+  def findFieldWithAnnotation[A <: Annotation](cl: Class[_], annotation: Class[A]): Option[(Field, A)] = {
+    val fields = cl.getDeclaredFields
+
+    def lookup(i: Int): Option[(Field, A)] = {
+      if (i + 1 >= fields.length) Option.empty
+      else if (fields(i).getAnnotation(annotation) != null) Option((fields(i), fields(i).getAnnotation(annotation)))
+      else lookup(i + 1)
+    }
+
+    lookup(0)
+  }
+
   private[imp] def typeToSqlType(name: String) = sqlMapping.get(name)
 
   private[imp] def typeToSqlType(cl: Class[_]) = sqlMapping(cl.getName)
 
-  private[imp] def createTableDefinition(entity: settings.Entity): String = {
+  private[imp] def createTableDefinition(entity: settings.Schema): String = {
     require(entity != null)
 
     val sql = s"CREATE TABLE ${if (entity.skipIfExists) "IF NOT EXISTS" else ""} " +
@@ -25,11 +51,11 @@ package object imp {
     sql
   }
 
-  private[imp] def createColumnsDefinition(entity: settings.Entity): String = {
+  private[imp] def createColumnsDefinition(entity: settings.Schema): String = {
     val sql = appendId(entity.key)
 
     appendColumns(sql, entity.columns)
-    appendForeignColumns(sql, entity.foreignColumns)
+    appendForeignColumns(sql, entity.toOneProps)
 
     sql.setLength(sql.length - 1)
     sql.append(")").toString()
@@ -52,8 +78,7 @@ package object imp {
       if (column.definition.isDefined) {
         sql.append(column.definition)
       } else {
-        sql.append('`').append(column.name).append("` ").append(typeToSqlType(column.backedType))
-          .append(s" ${if (column.nullable) "" else " NOT NULL"}")
+        appendColumnDefinition(sql, column.name, column.backedType, column.nullable)
       }
 
       sql.append(",")
@@ -62,13 +87,19 @@ package object imp {
     sql
   }
 
-  private def appendForeignColumns(sql: StringBuilder, columns: Iterable[ForeignColumn]) = {
+  private def appendForeignColumns(sql: StringBuilder, columns: Iterable[ToOneProperty]) = {
     for (foreign <- columns) {
-      sql.append("FOREIGN KEY (").append(foreign.name).append(") REFERENCES ")
-        .append(foreign.foreignTable).append("(").append(foreign.foreignColumn).append("),")
+      appendColumnDefinition(sql, foreign.name, foreign.backedReferencedType, foreign.nullable)
+        .append(", FOREIGN KEY (`").append(foreign.name).append("`) REFERENCES ")
+        .append(foreign.foreignTable).append("(`").append(foreign.foreignColumn).append("`),")
     }
 
     sql
+  }
+
+  private def appendColumnDefinition(sql: StringBuilder, name: String, backedType: Class[_], isNullable: Boolean) = {
+    sql.append('`').append(name).append("` ").append(typeToSqlType(backedType))
+      .append(s" ${if (isNullable) "" else " NOT NULL"}")
   }
 
 }

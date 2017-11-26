@@ -16,6 +16,10 @@ final class JdbcConnection(settings: ConnectionSettings) extends Connection {
 
   override def execSql(sql: String): Unit = {
     require(connection != null)
+
+    if (settings.verbose) {
+      println(s"exec sql: $sql")
+    }
     connection.createStatement().execute(sql)
   }
 
