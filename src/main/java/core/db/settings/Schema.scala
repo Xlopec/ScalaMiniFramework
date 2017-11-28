@@ -3,6 +3,7 @@ package core.db.settings
 import java.lang.annotation.Annotation
 import java.lang.reflect.Field
 
+import core.db
 import core.db.annotation._
 import core.db.{annotation, imp}
 
@@ -81,14 +82,14 @@ final case class Schema private(backedClass: Class[_ <: AnyRef], name: String, s
 object Column {
 
   def apply(field: java.lang.reflect.Field): Column = {
-    val annotation = field.getAnnotation(classOf[Property])
+    val annotation = field.getAnnotation(classOf[db.annotation.Column])
 
-    require(annotation != null, s"Missing annotation ${classOf[Property]}")
+    require(annotation != null, s"Missing annotation ${classOf[db.annotation.Column]}")
 
     Column(field, createName(annotation).getOrElse(field.getName.toUpperCase), annotation.nullable(), createDefinition(annotation))
   }
 
-  def createName(id: Property): Option[String] = {
+  def createName(id: annotation.Column): Option[String] = {
     if (id.name() == null || id.name().isEmpty) {
       Option.empty
     } else {
@@ -96,7 +97,7 @@ object Column {
     }
   }
 
-  def createDefinition(id: Property): Option[String] = {
+  def createDefinition(id: annotation.Column): Option[String] = {
     if (id.definition() == null || id.definition().isEmpty) {
       Option.empty
     } else {

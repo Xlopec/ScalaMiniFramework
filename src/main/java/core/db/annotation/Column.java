@@ -7,12 +7,14 @@ import java.lang.annotation.Target;
 
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.FIELD)
-public @interface Property {
+public @interface Column {
 
     boolean nullable() default false;
 
     String definition() default "";
 
     String name() default "";
+
+    boolean generatedId() default false;
 
 }

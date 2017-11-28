@@ -1,16 +1,16 @@
 package core.db.test;
 
-import core.db.annotation.Entity;
+import core.db.annotation.Column;
 import core.db.annotation.Id;
-import core.db.annotation.Property;
+import core.db.annotation.Table;
 
-@Entity(table = "something")
+@Table(tableName = "something")
 public class Something {
 
     @Id(autoincrement = true, name = "id")
     private long id;
 
-    @Property(name = "message", nullable = true)
+    @Column(name = "message", nullable = true, generatedId = true)
     private String message;
 
 }

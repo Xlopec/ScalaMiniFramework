@@ -1,29 +1,12 @@
 package core.db.imp
 
-import core.db.settings.Schema
-import core.db.{Connection, Dao, DaoManager}
+class BaseDaoImp[E <: AnyRef, K](private val dao: com.j256.ormlite.dao.Dao[E, K]) extends core.db.Dao[E, K] {
 
-class BaseDaoImp[E <: AnyRef, K](private val connection: Connection, val schema: Schema, protected val daoManager: DaoManager) extends Dao[E, K] {
+  override def create(entity: E): K = dao.create(entity).asInstanceOf[K]
 
-  protected val mapper = new BaseMapper
+  override def read(key: K): E = dao.queryForId(key)
 
-  override def create(entity: E): K = ???
+  override def update(entity: E): Unit = dao.update(entity)
 
-  override def read(key: K): E = {
-    val mappedQuery = createSelectQuery(schema)
-
-    val query = connection.query(mappedQuery._2)
-
-    mapper.map(schema, query, mappedQuery._1)
-  }
-
-  override def update(entity: E): Unit = ???
-
-  override def delete(key: K): Unit = ???
-
-  override protected[db] def createTable(): Unit = {
-    val sql = createTableDefinition(schema)
-
-    connection.execSql(sql)
-  }
+  override def delete(key: K): Unit = dao.deleteById(key)
 }

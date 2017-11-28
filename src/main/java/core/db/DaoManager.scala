@@ -1,74 +1,53 @@
 package core.db
 
+import com.j256.ormlite.dao.DaoManager
+import com.j256.ormlite.jdbc.JdbcConnectionSource
+import com.j256.ormlite.support.ConnectionSource
+import com.j256.ormlite.table.TableUtils
+import core.db.exception.DbException
 import core.db.imp.BaseDaoImp
-import core.db.settings.Schema
+import core.db.settings.ConnectionSettings
 import core.di.annotation.Component
 
 import scala.collection.mutable
 
 @Component
-final class DaoManager(connection: Connection) {
-  connection.connect()
+final class DaoManager(settings: ConnectionSettings) {
+
+  private val connection = connect()
 
   private val map = new mutable.HashMap[Class[_ <: AnyRef], Dao[_, _]]
 
   def getDao[E <: AnyRef, K](cl: Class[E]): Dao[E, K] = {
     require(cl != null)
 
-    getDao(cl, new mutable.HashSet[Class[_]]())
+    map.synchronized {
+      map.getOrElseUpdate(cl, createDao(cl)).asInstanceOf[Dao[E, K]]
+    }
   }
 
   def release(): Unit = {
     map.clear()
-    connection.disconnect()
+    connection.close()
   }
 
-  private def getDao[E <: AnyRef, K](cl: Class[E], createChain: mutable.Set[Class[_]]): Dao[E, K] = {
-    map.synchronized {
+  private def connect(): ConnectionSource = {
+    try {
+      Class.forName(settings.driver)
 
-      val cachedDao = map.get(cl)
-
-      if (cachedDao.isDefined) {
-        cachedDao.asInstanceOf[Dao[E, K]]
+      if (settings.user != null && settings.password != null) {
+        new JdbcConnectionSource(settings.host, settings.user, settings.password)
       } else {
-        createDao[E, K](cl, createChain)
-        map(cl).asInstanceOf[Dao[E, K]]
+        new JdbcConnectionSource(settings.host)
       }
+    } catch {
+      case e: Exception => throw new DbException(s"Couldn't access db $settings", e)
     }
   }
 
-  private def createDao[E <: AnyRef, K](cl: Class[E], createChain: mutable.Set[Class[_]]): Unit = {
-    if (createChain.contains(cl)) {
-      return
-    }
-
-    createChain += cl
-
-    val entity = Schema(cl)
-    // long path, create tables without references
-    // to other tables
-    for (foreign <- entity.toOneProps if !hasCachedDao(foreign.backedType)) {
-      createDao(foreign.backedType, createChain)
-      createChain += foreign.backedType
-    }
-
-    val dao = new BaseDaoImp[E, K](connection, entity, this)
-
-    dao.createTable()
-
-    for (foreign <- entity.toManyProperty if !hasCachedDao(foreign.backedType)) {
-      createDao(foreign.backedType, createChain)
-      createChain += foreign.backedType
-    }
-
-    for (joining <- entity.joiningProps if !hasCachedDao(joining.backedTableType)) {
-      createDao(joining.backedTableType, createChain)
-      createChain += joining.backedTableType
-    }
-
-    map.put(cl, dao)
+  private def createDao[E <: AnyRef, K](value: Class[E]): BaseDaoImp[E, K] = {
+    TableUtils.createTableIfNotExists(connection, value)
+    new BaseDaoImp(DaoManager.createDao(connection, value)).asInstanceOf[BaseDaoImp[E, K]]
   }
-
-  private def hasCachedDao(cl: Class[_ <: AnyRef]) = map.get(cl).isDefined
 
 }

@@ -7,8 +7,8 @@ import java.lang.annotation.Target;
 
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
-public @interface Entity {
-    String table() default "";
+public @interface Table {
+    String tableName() default "";
 
     boolean skipIfExists() default true;
 
