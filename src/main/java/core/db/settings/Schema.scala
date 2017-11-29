@@ -15,13 +15,13 @@ object Schema {
     val collected = collectColumns(backedClass)
 
     Schema(backedClass, tableName(backedClass),
-      backedClass.getAnnotation(classOf[annotation.Entity]).skipIfExists(),
+      backedClass.getAnnotation(classOf[annotation.Table]).skipIfExists(),
       collected._1, collected._2, collected._3, collected._4, collected._5)
   }
 
   def tableName(e: Class[_]): String = {
-    val a = e.getAnnotation(classOf[annotation.Entity])
-    if (a.table() == null || a.table().isEmpty) e.getName.toUpperCase else a.table()
+    val a = e.getAnnotation(classOf[annotation.Table])
+    if (a.tableName() == null || a.tableName().isEmpty) e.getName.toUpperCase else a.tableName()
   }
 
   private def collectColumns(backedClass: Class[_ <: AnyRef]): (Key, Set[Column], Set[ToOneProperty], Set[ToManyProperty], Set[JoiningProperty]) = {
