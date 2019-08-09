@@ -1,5 +1,7 @@
 package core.app.classes;
 
+import core.app.classes.service.GreetingService;
+
 public class Bus implements Transport {
     private String message;
     private final GreetingService greetingService;

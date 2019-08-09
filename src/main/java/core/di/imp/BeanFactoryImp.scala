@@ -3,6 +3,7 @@ package core.di.imp
 import java.lang.reflect
 import java.lang.reflect.{Constructor, Modifier}
 
+import core.di.annotation.Autowiring
 import core.di.{BeanFactory, settings}
 import core.di.settings._
 
@@ -59,11 +60,18 @@ final class BeanFactoryImp(declarations: Iterable[BeanDeclaration]) extends Bean
     }
   }
 
-  private def instantiate[T <: AnyRef](c: Class[T], declaration: BeanDeclaration, beanChain: mutable.Set[String]) = {
+  private def instantiate[T <: AnyRef](c: Class[T], declaration: BeanDeclaration, beanChain: mutable.Set[String]): T = {
     val bean = instantiateForConstructor(c, declaration, beanChain)
+    val dependencyResolver = (dependency: Dependency) => {
+      dependency.either match {
+        case Left(Property(_, value)) => value
+        case Right(BeanRef(id)) => instantiate(id)
+      }
+    }
     // injects declared dependencies
     // through declared setters
-    inject(bean, declaration)
+    injectSetters(bean, declaration, dependencyResolver)
+    injectFields(bean, declaration, dependencyResolver)
     bean
   }
 
@@ -71,7 +79,7 @@ final class BeanFactoryImp(declarations: Iterable[BeanDeclaration]) extends Bean
     require(!Modifier.isAbstract(c.getModifiers), s"Cannot instantiate abstract class $c, bean ${declaration.id}")
     require(!hasCyclicDependency(declaration, beanChain),
       s"""Cyclic dependency was found for constructor of bean: ${declaration.id},
-          |the dependency path was: ${beanChain.mkString("->")}
+         |the dependency path was: ${beanChain.mkString("->")}
        """.stripMargin)
 
     beanChain += declaration.id
@@ -95,45 +103,105 @@ final class BeanFactoryImp(declarations: Iterable[BeanDeclaration]) extends Bean
         case Right(BeanRef(id)) => instantiate(id, beanChain)
       })
 
-      var matchingConstructor: Option[reflect.Constructor[T]] = Option.empty
+      val matchingConstructor = findMatchingConstructor(matchingConstructors, args)
 
-      for (constructor <- matchingConstructors) {
-        val argsMatching = isMatchingArgs(args, constructor)
-
-        require(argsMatching && matchingConstructor.isEmpty,
-          s"""At least two constructors can be used to instantiate bean of class $c,
-              |the first - ${matchingConstructor.get.getParameterTypes}
-              |and the second one - ${constructor.getParameterTypes}""".stripMargin)
-
-        if (argsMatching) {
-          matchingConstructor = Option.apply(constructor.asInstanceOf[reflect.Constructor[T]])
-        }
-      }
       require(matchingConstructor.isDefined, s"Couldn't find suitable constructor for bean $c")
       matchingConstructor.get.newInstance(args: _*)
     }
   }
 
-  private def inject[T](bean: T, declaration: BeanDeclaration): Unit = {
-    val declared = declaration.dependencies.filter(dep => dep.scope != settings.Constructor)
+  private def findMatchingConstructor[T <: AnyRef](constructors: Array[Constructor[_]], args: List[AnyRef]) = {
 
-    for (dependency <- declared) {
-      val args = dependency.either match {
-        case Left(Property(classOf, value)) => (classOf, value)
-        case Right(BeanRef(id)) => val instance = instantiate(id); (instance.getClass, instance)
+    def loop(i: Int, previous: Option[Constructor[T]]): Option[Constructor[T]] = {
+      if (i == constructors.length) {
+        previous
+      } else {
+        val constructor = constructors(i)
+        val argsMatching = isMatchingArgs(args, constructor)
+
+        if (argsMatching) {
+          if (previous.isDefined) {
+            // previous constructor shouldn't be annotated;
+            // in this case only one annotated constructor is acceptable
+            require(!previous.get.isAnnotationPresent(classOf[Autowiring])
+              && constructor.isAnnotationPresent(classOf[Autowiring]),
+              s"""At least two constructors can be used to instantiate bean of class,
+                 |the first - ${previous.get.getParameterTypes.toList}
+                 |and the second one - ${constructor.getParameterTypes.toList}.
+                 |Use ${classOf[Autowiring].getTypeName} annotation to choose which one to use,
+                 |but only once""".stripMargin)
+            // we've found constructor to inject,
+            // we can ignore all other
+            Option.apply(constructor.asInstanceOf[reflect.Constructor[T]])
+          } else {
+            loop(i + 1, Option.apply(constructor.asInstanceOf[reflect.Constructor[T]]))
+          }
+        } else {
+          loop(i + 1, previous)
+        }
+      }
+    }
+
+    loop(0, Option.empty)
+  }
+
+  private def injectSetters[T](bean: T, declaration: BeanDeclaration, resolver: (Dependency => AnyRef)): Unit = {
+    val setterDeps = declaration.dependencies collect {
+      case d: Dependency if (d.scope match {
+        case Setter(_) => true;
+        case _ => false
+      }) => d
+    }
+
+    for (dependency <- setterDeps) {
+      dependency.scope.asInstanceOf[settings.Setter].method.invoke(bean, resolver(dependency))
+    }
+  }
+
+  private def injectFields[T](bean: T, declaration: BeanDeclaration, resolver: (Dependency => AnyRef)): Unit = {
+    val fieldDeps = declaration.dependencies collect {
+      case d: Dependency if (d.scope match {
+        case Field(_) => true;
+        case _ => false
+      }) => d
+    }
+
+    for (dependency <- fieldDeps) {
+      val field = dependency.scope.asInstanceOf[settings.Field].field
+      val isAccessible = field.isAccessible
+
+      if (!isAccessible) {
+        field.setAccessible(true)
       }
 
-      bean.getClass.getMethod(dependency.scope.asInstanceOf[Setter].field, args._1).invoke(bean, args._2)
+      try {
+        val fieldVal = Option(field.get(bean))
+        // after constructor and setter dependencies were injected
+        // we should inject instance fields. If field value is present,
+        // then it was injected before, which shouldn't happen.
+        require(fieldVal.isEmpty,
+          s"""Field of class ${bean.getClass} was already set either via constructor or via setter
+             |or has a default value
+           """.stripMargin)
+        field.set(bean, resolver(dependency))
+      } finally {
+        if (!isAccessible) {
+          field.setAccessible(isAccessible)
+        }
+      }
     }
   }
 
   private def isMatchingArgs(toCheckArgs: List[AnyRef], real: Constructor[_]) = {
     val realArgs = real.getParameterTypes
 
+    def wrap(i: Int) = primitiveToWrapper get realArgs(i).getTypeName map (v => v.getWrappedClass) getOrElse realArgs(i)
+
     def isConstructorArgsMatching(i: Int): Boolean = {
       if (i == real.getParameterCount - 1) true
-      else realArgs(i).isAssignableFrom(toCheckArgs(i).getClass) && isConstructorArgsMatching(i + 1)
+      else wrap(i).isAssignableFrom(toCheckArgs(i).getClass) && isConstructorArgsMatching(i + 1)
     }
+
     isConstructorArgsMatching(0)
   }
 

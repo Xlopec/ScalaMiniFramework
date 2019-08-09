@@ -1,4 +1,7 @@
-package core.app.classes;
+package core.app.classes.service;
+
+import core.app.classes.InterfaceInjectable;
+import core.app.classes.Transport;
 
 public class GreetingServiceImpl implements GreetingService, InterfaceInjectable {
     private String message;
